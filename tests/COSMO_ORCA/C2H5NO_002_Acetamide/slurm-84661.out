@@ -1,0 +1,105 @@
+
+
+**********************************************************************
+
+  Available user defined functions:
+    [0;31mspace[0m  # ouput the space of the subfolders
+    [0;31mmc[0m     # my connections shows the amount of connections to this login node
+    [0;31mcsf[0m    # count subfolder files
+
+    [0;31msq[0m     # show queue for current user
+    [0;31mji[0m [1;33mID[0m  # shows the job information on the job with ID
+
+    [0;31mut[0m     # returns the usertemp path for the current user
+    [0;31mjut[0m [1;33mID[0m # cd into local usertemp of job ID on the calculating node
+
+**********************************************************************
+
+
+Start time:
+Fri Apr 22 23:47:42 CEST 2022
+starting: C2H5NO_002_Acetamide_CnfS1
+- settings were not given, using default
+- settings used:  {'rdkconfgen_n_conf_generated': 50, 'rdkconfgen_rms_threshhold': 1.0}
+- init, n_confs: 1
+- rdkconfgen, n_confs: 3
+- orca_xtb2_alpb, n_confs: 3
+- sort_energy, n_confs: 3
+- filter_by_energy_window, n_confs: 3
+- filter_by_rms_window, n_confs: 2
+- orca_dft_cosmo_fast, n_confs: 2
+- filter, n_confs: 1
+- orca_dft_cosmo_final, n_confs: 1
+- final, n_confs: 1
+finished: C2H5NO_002_Acetamide_CnfS1
+
+La fin
+
+End time:
+Fri Apr 22 23:51:08 CEST 2022
+
+SLURM_MEM_PER_CPU=2000
+SLURM_NODEID=0
+SLURM_TASK_PID=2245056
+SLURM_PRIO_PROCESS=0
+SLURM_SUBMIT_DIR=/work/vt2/csm1279/20220422_23_44_31/C2H5NO_002_Acetamide_CnfS1
+SLURM_CPUS_PER_TASK=1
+SLURM_PROCID=0
+SLURM_JOB_GID=5900
+SLURMD_NODENAME=g207
+SLURM_TASKS_PER_NODE=2
+SLURM_NNODES=1
+SLURM_JOB_NODELIST=g207
+SLURM_CLUSTER_NAME=stuhh21
+SLURM_NODELIST=g207
+SLURM_NTASKS=2
+SLURM_JOB_CPUS_PER_NODE=2
+SLURM_TOPOLOGY_ADDR=g207
+SLURM_WORKING_CLUSTER=stuhh21:10.0.10.30:6817:9472:109
+SLURM_JOB_NAME=run_orca
+SLURM_JOBID=84661
+SLURM_CONF=/var/spool/slurm/conf-cache/slurm.conf
+SLURM_NODE_ALIASES=(null)
+SLURM_JOB_QOS=normal
+SLURM_TOPOLOGY_ADDR_PATTERN=node
+SLURM_CPUS_ON_NODE=2
+SLURM_JOB_NUM_NODES=1
+SLURM_JOB_UID=5930
+SLURM_JOB_PARTITION=mpp
+SLURM_JOB_USER=csm1279
+SLURM_NPROCS=2
+SLURM_SUBMIT_HOST=hummel
+SLURM_JOB_ACCOUNT=vt2
+SLURM_GTIDS=0
+SLURM_JOB_ID=84661
+SLURM_LOCALID=0
+
+JobId=84661 JobName=run_orca
+   UserId=csm1279(5930) GroupId=vt2(5900) MCS_label=N/A
+   Priority=2269 Nice=0 Account=vt2 QOS=normal
+   JobState=RUNNING Reason=None Dependency=(null)
+   Requeue=1 Restarts=0 BatchFlag=1 Reboot=0 ExitCode=0:0
+   RunTime=00:03:28 TimeLimit=3-00:00:00 TimeMin=N/A
+   SubmitTime=2022-04-22T23:47:29 EligibleTime=2022-04-22T23:47:29
+   AccrueTime=2022-04-22T23:47:29
+   StartTime=2022-04-22T23:47:41 EndTime=2022-04-25T23:47:41 Deadline=N/A
+   SuspendTime=None SecsPreSuspend=0 LastSchedEval=2022-04-22T23:47:41 Scheduler=Backfill
+   Partition=mpp AllocNode:Sid=hummel:1259409
+   ReqNodeList=(null) ExcNodeList=(null)
+   NodeList=g207
+   BatchHost=g207
+   NumNodes=1 NumCPUs=2 NumTasks=2 CPUs/Task=1 ReqB:S:C:T=0:0:*:*
+   TRES=cpu=2,mem=4000M,node=1,billing=2
+   Socks/Node=* NtasksPerN:B:S:C=0:0:*:* CoreSpec=*
+   MinCPUsNode=1 MinMemoryCPU=2000M MinTmpDiskNode=0
+   Features=(null) DelayBoot=00:00:00
+   OverSubscribe=OK Contiguous=0 Licenses=(null) Network=(null)
+   Command=/work/vt2/csm1279/20220422_23_44_31/C2H5NO_002_Acetamide_CnfS1/run_orca.slurm
+   WorkDir=/work/vt2/csm1279/20220422_23_44_31/C2H5NO_002_Acetamide_CnfS1
+   StdErr=/work/vt2/csm1279/20220422_23_44_31/C2H5NO_002_Acetamide_CnfS1/slurm-84661.out
+   StdIn=/dev/null
+   StdOut=/work/vt2/csm1279/20220422_23_44_31/C2H5NO_002_Acetamide_CnfS1/slurm-84661.out
+   Power=
+   MailUser=simon.mueller@tuhh.de MailType=FAIL
+   
+

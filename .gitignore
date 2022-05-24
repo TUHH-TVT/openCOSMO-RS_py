@@ -1,0 +1,14 @@
+__pycache__/
+.vscode/
+.pytest_cache/
+.ipynb_checkpoints/
+build/
+dist/
+000_*/
+*.egg*
+*.png
+*.pdf
+*.svg
+*.html
+*.zip
+*.csv

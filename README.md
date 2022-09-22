@@ -18,3 +18,11 @@ To generate quantum chemical input files using RDKit and ORCA with the CPCM modu
 ## License
 
 This project is licensed under the GNU General Public License v2.0
+
+## Other COSMO-RS related projects
+
+The reader might be also interested in the following related projects:
+ - [openCOSMO-RS_cpp](https://github.com/TUHH-TVT/openCOSMO-RS_cpp)
+ - [LVPP sigma profile database](https://github.com/lvpp/sigma)
+ - [Benchmark COSMO-SAC implementation](https://github.com/usnistgov/COSMOSAC)
+ - [Pysac](https://github.com/lvpp/pysac)

@@ -4,7 +4,8 @@
 
 This package is a fully python based implementation of the model COSMO-RS, supporting multiple segment descriptors.
 Details about this implementation can be found in our publication:
-LINK
+
+https://www.sciencedirect.com/science/article/abs/pii/S0378381222000954
 
 
 ## Application 

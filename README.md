@@ -10,11 +10,14 @@ https://www.sciencedirect.com/science/article/abs/pii/S0378381222000954
 
 ## Application 
 
-The package can be installed via pip.
+The package can be installed via pip with the folling command:
+```
+pip install git+https://github.com/TUHH-TVT/openCOSMO-RS_py
+```
+
 A short introduction on its use can be found in the examples directory.
 
-To generate quantum chemical input files using RDKit and ORCA with the CPCM module, the script "generate_conformers.py" in the src directory may be applied. 
-
+To generate the needed quantum chemical input files using RDKit and ORCA with the CPCM module, please have a look here: https://github.com/TUHH-TVT/openCOSMO-RS_conformer_pipeline
 
 ## License
 

@@ -10,7 +10,7 @@ https://www.sciencedirect.com/science/article/abs/pii/S0378381222000954
 
 ## Application 
 
-The package can be installed via pip with the folling command:
+The package can be installed via pip with the following command:
 ```
 pip install git+https://github.com/TUHH-TVT/openCOSMO-RS_py
 ```

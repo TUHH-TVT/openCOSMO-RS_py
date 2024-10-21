@@ -17,7 +17,7 @@ import plotly.io as pio
 pio.renderers.default='browser'
 
 import opencosmorspy.helper_functions as hf
-from opencosmorspy.input_parsers import COSMOParser
+from opencosmorspy.input_parsers import SigmaProfileParser
 from opencosmorspy.parameterization import Parameterization
 from opencosmorspy.segtp_collection import SegtpCollection
 
@@ -30,7 +30,7 @@ class Molecule(object):
         self.cosmo_struct_lst = []
         for path in filepath_lst:
             cosmo_info = (
-                COSMOParser(path, qc_program).get_cosmo_info())
+                SigmaProfileParser(path, qc_program))
             self.cosmo_struct_lst.append(COSMOStruct(cosmo_info))
             self.cosmo_struct_lst[-1]
 
@@ -117,7 +117,7 @@ class COSMOStruct(object):
         self.seg_pos = cosmo_info['seg_pos']
         self.seg_charge = cosmo_info['seg_charge']
         self.seg_area = cosmo_info['seg_area']
-        self.seg_sigma_raw = cosmo_info['seg_sigma_raw']
+        self.seg_sigma_raw = cosmo_info['seg_sigma_raw'] if cosmo_info['seg_sigma_raw'] else cosmo_info['seg_sigma_raw_uncorrected']
         self.seg_potential = cosmo_info['seg_potential']
 
         # Define missing properties

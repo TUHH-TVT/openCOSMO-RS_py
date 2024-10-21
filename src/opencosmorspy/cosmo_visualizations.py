@@ -351,5 +351,126 @@ def plot_extended_sigmaprofiles_plotly(dir_plot, filepath, qc_program,
         fig.write_html(os.path.join(dir_plot, plot_name+'.html'))
 
 
+def plot_cosmo_surface(cosmo_info, mode='dynamic', dir_plot='.', plot_name='cosmo_surface'):
+    """Plot a COSMO surface with atoms and bonds.
+
+    Example usage:
+    parser = COSMOParser(
+        'file/path/to/cosmo_output.orcacosmo', 
+        'orca'
+    )
+    cosmo_info = parser.get_cosmo_info()
+    plot_cosmo_surface_with_atoms_and_bonds(cosmo_info)"""
+    element_colors = {
+        'H': 'green',  # Hydrogen
+        'C': 'gray',   # Carbon
+        'N': 'blue',   # Nitrogen
+        'O': 'red',    # Oxygen
+    }
+    def get_bond_distance(elm1, elm2):
+        """Return bond distance threshold based on atom pair."""
+        # Define bond length thresholds (in angstroms) for common bond pairs
+        bond_thresholds = {
+            ('C', 'C'): 1.7, # adjusted from 1.54 to 1.7 for better visualization
+            ('C', 'H'): 1.4, # adjusted from 1.09 to 1.4 for better visualization
+            ('C', 'N'): 1.47,
+            ('C', 'O'): 1.43,
+            ('N', 'H'): 1.4, # adjusted from 1.01 to 1.4 for better visualization
+            ('O', 'H'): 1.2, # adjusted from 0.96 to 1.2 for better visualization
+            ('N', 'N'): 1.10,
+            ('N', 'O'): 1.21,
+            ('O', 'O'): 1.48,
+            ('H', 'H'): 0.74  # not likely, but just for completeness
+        }
+        return bond_thresholds.get((elm1, elm2), bond_thresholds.get((elm2, elm1), 1.5))  # default 1.5 Å if not found
+
+    fig = go.Figure(data=[go.Scatter3d(
+        x=cosmo_info['seg_pos'][:, 0],
+        y=cosmo_info['seg_pos'][:, 1],
+        z=cosmo_info['seg_pos'][:, 2],
+        mode='markers',
+        marker=dict(
+            size=cosmo_info['seg_area'] * 50,  # Scale the size for better visualization
+            color=cosmo_info['seg_charge'],  # Set the color based on charge
+            colorscale='bluered',  # Color scale for charges
+            colorbar=dict(title="Charge"),
+            opacity=0.8
+        ),
+        name=None,
+        showlegend=False
+    )])
+
+    # Add bonds (lines) between atoms first so they appear below atoms
+    num_atoms = len(cosmo_info['atm_elmnt'])
+    for i in range(num_atoms):
+        for j in range(i + 1, num_atoms):
+            elm1 = cosmo_info['atm_elmnt'][i]
+            elm2 = cosmo_info['atm_elmnt'][j]
+            bond_dist = get_bond_distance(elm1, elm2)
+            
+            # Calculate distance between atom i and atom j
+            dist = np.linalg.norm(cosmo_info['atm_pos'][i] - cosmo_info['atm_pos'][j])
+            
+            if dist <= bond_dist:
+                # Add a line (bond) between the two atoms
+                fig.add_trace(go.Scatter3d(
+                    x=[cosmo_info['atm_pos'][i, 0], cosmo_info['atm_pos'][j, 0]],
+                    y=[cosmo_info['atm_pos'][i, 1], cosmo_info['atm_pos'][j, 1]],
+                    z=[cosmo_info['atm_pos'][i, 2], cosmo_info['atm_pos'][j, 2]],
+                    mode='lines',
+                    line=dict(color='black', width=10),
+                    name=None,
+                    showlegend=False  # Don't clutter the legend with bond labels
+                ))
+
+    # Add spheres for each atom (after bonds to ensure Z-order)
+    for i, element in enumerate(cosmo_info['atm_elmnt']):
+        # Get atomic position and radius
+        x_atm = cosmo_info['atm_pos'][i, 0]
+        y_atm = cosmo_info['atm_pos'][i, 1]
+        z_atm = cosmo_info['atm_pos'][i, 2]
+        radius = cosmo_info['atm_rad'][i]
+        
+        # Get the color for the current element
+        color = element_colors.get(element, 'green')  # Default to green if element not found
+
+        # Add a sphere for the atom
+        fig.add_trace(go.Scatter3d(
+            x=[x_atm],
+            y=[y_atm],
+            z=[z_atm],
+            mode='markers',
+            marker=dict(
+                size=radius * 10,  # Scale radius for better visualization
+                color=color
+            ),
+            name=None,
+            showlegend=False  # Don't clutter the legend with atom labels
+        ))
+
+    # Add labels and titles
+    fig.update_layout(
+        scene=dict(
+            xaxis_title='X Position',
+            yaxis_title='Y Position',
+            zaxis_title='Z Position'
+        ),
+        width=800,
+        height=800
+    )
+
+    # Remove grid lines
+    fig.update_scenes(xaxis_showgrid=False, yaxis_showgrid=False, zaxis_showgrid=False)
+
+    # Show the plot
+    fig.show()
+
+    if mode == 'static':
+        fig.write_image(os.path.join(dir_plot, plot_name+'.png'))
+        fig.write_image(os.path.join(dir_plot, plot_name+'.pdf'))
+        fig.write_image(os.path.join(dir_plot, plot_name+'.svg'))
+    if mode == 'dynamic':
+        fig.write_html(os.path.join(dir_plot, plot_name+'.html'))
+
 if __name__ == '__main__':
     pass

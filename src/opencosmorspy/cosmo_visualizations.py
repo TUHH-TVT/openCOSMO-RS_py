@@ -5,6 +5,8 @@ import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+import rdkit.Chem
+import rdkit.Chem.rdDetermineBonds
 
 import opencosmorspy.segtp_collection as stpc
 from opencosmorspy.parameterization import Parameterization
@@ -351,47 +353,27 @@ def plot_extended_sigmaprofiles_plotly(dir_plot, filepath, qc_program,
         fig.write_html(os.path.join(dir_plot, plot_name+'.html'))
 
 
-def plot_cosmo_surface(cosmo_info, mode='dynamic', dir_plot='.', plot_name='cosmo_surface'):
+def plot_cosmo_surface(parser, mode='dynamic', dir_plot='.', plot_name='cosmo_surface'):
     """Plot a COSMO surface with atoms and bonds.
 
     Example usage:
-    parser = COSMOParser(
-        'file/path/to/cosmo_output.orcacosmo', 
-        'orca'
-    )
-    cosmo_info = parser.get_cosmo_info()
-    plot_cosmo_surface_with_atoms_and_bonds(cosmo_info)"""
-    element_colors = {
-        'H': 'green',  # Hydrogen
-        'C': 'gray',   # Carbon
-        'N': 'blue',   # Nitrogen
-        'O': 'red',    # Oxygen
-    }
-    def get_bond_distance(elm1, elm2):
-        """Return bond distance threshold based on atom pair."""
-        # Define bond length thresholds (in angstroms) for common bond pairs
-        bond_thresholds = {
-            ('C', 'C'): 1.7, # adjusted from 1.54 to 1.7 for better visualization
-            ('C', 'H'): 1.4, # adjusted from 1.09 to 1.4 for better visualization
-            ('C', 'N'): 1.47,
-            ('C', 'O'): 1.43,
-            ('N', 'H'): 1.4, # adjusted from 1.01 to 1.4 for better visualization
-            ('O', 'H'): 1.2, # adjusted from 0.96 to 1.2 for better visualization
-            ('N', 'N'): 1.10,
-            ('N', 'O'): 1.21,
-            ('O', 'O'): 1.48,
-            ('H', 'H'): 0.74  # not likely, but just for completeness
-        }
-        return bond_thresholds.get((elm1, elm2), bond_thresholds.get((elm2, elm1), 1.5))  # default 1.5 Å if not found
+    parser = SigmaProfileParser('path/to/simulation.orcacosmo', qc_program='orca')
+    plot_cosmo_surface_with_atoms_and_bonds(parser)"""
+
+    
+    mol = rdkit.Chem.MolFromXYZBlock(parser.save_to_xyz())
+    rdkit.Chem.rdDetermineBonds.DetermineBonds(mol, charge=0)
+    if mol is None:
+        raise ValueError("Unable to load molecule from XYZ file.")
 
     fig = go.Figure(data=[go.Scatter3d(
-        x=cosmo_info['seg_pos'][:, 0],
-        y=cosmo_info['seg_pos'][:, 1],
-        z=cosmo_info['seg_pos'][:, 2],
+        x=parser['seg_pos'][:, 0],
+        y=parser['seg_pos'][:, 1],
+        z=parser['seg_pos'][:, 2],
         mode='markers',
         marker=dict(
-            size=cosmo_info['seg_area'] * 50,  # Scale the size for better visualization
-            color=cosmo_info['seg_charge'],  # Set the color based on charge
+            size=parser['seg_area'] * 50,  # Scale the size for better visualization
+            color=parser['seg_charge'],  # Set the color based on charge
             colorscale='bluered',  # Color scale for charges
             colorbar=dict(title="Charge"),
             opacity=0.8
@@ -400,39 +382,53 @@ def plot_cosmo_surface(cosmo_info, mode='dynamic', dir_plot='.', plot_name='cosm
         showlegend=False
     )])
 
-    # Add bonds (lines) between atoms first so they appear below atoms
-    num_atoms = len(cosmo_info['atm_elmnt'])
-    for i in range(num_atoms):
-        for j in range(i + 1, num_atoms):
-            elm1 = cosmo_info['atm_elmnt'][i]
-            elm2 = cosmo_info['atm_elmnt'][j]
-            bond_dist = get_bond_distance(elm1, elm2)
-            
-            # Calculate distance between atom i and atom j
-            dist = np.linalg.norm(cosmo_info['atm_pos'][i] - cosmo_info['atm_pos'][j])
-            
-            if dist <= bond_dist:
-                # Add a line (bond) between the two atoms
-                fig.add_trace(go.Scatter3d(
-                    x=[cosmo_info['atm_pos'][i, 0], cosmo_info['atm_pos'][j, 0]],
-                    y=[cosmo_info['atm_pos'][i, 1], cosmo_info['atm_pos'][j, 1]],
-                    z=[cosmo_info['atm_pos'][i, 2], cosmo_info['atm_pos'][j, 2]],
-                    mode='lines',
-                    line=dict(color='black', width=10),
-                    name=None,
-                    showlegend=False  # Don't clutter the legend with bond labels
-                ))
+    element_colors = {
+        'H': 'green',      # Hydrogen
+        'C': 'black',      # Carbon
+        'N': 'blue',       # Nitrogen
+        'O': 'red',        # Oxygen
+        'S': 'yellow',     # Sulfur
+        'P': 'orange',     # Phosphorus
+        'F': 'light green',# Fluorine
+        'Cl': 'green',     # Chlorine
+        'Br': 'brown',     # Bromine
+        'I': 'purple',     # Iodine
+        'He': 'cyan',      # Helium
+        'Ne': 'cyan',      # Neon
+        'Ar': 'cyan',      # Argon
+        'Li': 'dark red',  # Lithium
+        'Na': 'blue',      # Sodium
+        'K': 'purple',     # Potassium
+        'Ca': 'dark green',# Calcium
+        'Fe': 'orange',    # Iron
+        'Mg': 'gray'       # Magnesium
+    }
+
+    # Add bonds as lines (RDKit automatically infers bonds from 3D structure)
+    for bond in mol.GetBonds():
+        i = bond.GetBeginAtomIdx()
+        j = bond.GetEndAtomIdx()
+        
+        # Add bond (line) between the two atoms
+        fig.add_trace(go.Scatter3d(
+            x=[parser['atm_pos'][i, 0], parser['atm_pos'][j, 0]],
+            y=[parser['atm_pos'][i, 1], parser['atm_pos'][j, 1]],
+            z=[parser['atm_pos'][i, 2], parser['atm_pos'][j, 2]],
+            mode='lines',
+            line=dict(color='black', width=10),
+            showlegend=False
+        ))
 
     # Add spheres for each atom (after bonds to ensure Z-order)
-    for i, element in enumerate(cosmo_info['atm_elmnt']):
+    for i, element in enumerate(parser['atm_elmnt']):
         # Get atomic position and radius
-        x_atm = cosmo_info['atm_pos'][i, 0]
-        y_atm = cosmo_info['atm_pos'][i, 1]
-        z_atm = cosmo_info['atm_pos'][i, 2]
-        radius = cosmo_info['atm_rad'][i]
+        x_atm = parser['atm_pos'][i, 0]
+        y_atm = parser['atm_pos'][i, 1]
+        z_atm = parser['atm_pos'][i, 2]
+        radius = parser['atm_rad'][i]
         
         # Get the color for the current element
-        color = element_colors.get(element, 'green')  # Default to green if element not found
+        color = element_colors.get(element, 'orange')  # Default to green if element not found
 
         # Add a sphere for the atom
         fig.add_trace(go.Scatter3d(

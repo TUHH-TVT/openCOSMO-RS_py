@@ -63,20 +63,25 @@ class SigmaProfileParser(UserDict):
         if calculate_averaged_sigmas:
             self.calculate_averaged_sigmas()
 
-    def save_to_xyz_file(self, filepath_xyz, comment=''):
+    def save_to_xyz(self, comment=''):
+        lines = []
         n_atoms = len(self['atm_nr'])
-        with open(filepath_xyz, 'w') as xyzf:
-            xyzf.write(f'{n_atoms}\n')
-            xyzf.write(f'{comment}\n')
-            for i_atom in range(n_atoms):
-                xyzf.write(
-                    '{:s}  {:.16f}  {:.16f}  {:.16f}\n'.format(
-                        self['atm_elmnt'][i_atom],
-                        self['atm_pos'][i_atom][0],
-                        self['atm_pos'][i_atom][1],
-                        self['atm_pos'][i_atom][2],
-                    )
+        lines.append(f'{n_atoms}')
+        lines.append(f'{comment}')
+        for i_atom in range(n_atoms):
+            lines.append(
+                '{:s}  {:.16f}  {:.16f}  {:.16f}'.format(
+                    self['atm_elmnt'][i_atom],
+                    self['atm_pos'][i_atom][0],
+                    self['atm_pos'][i_atom][1],
+                    self['atm_pos'][i_atom][2],
                 )
+            )
+        return '\n'.join(lines)
+
+    def save_to_xyz_file(self, filepath_xyz, comment=''):
+        with open(filepath_xyz, 'w') as xyzf:
+            xyzf.write(self.save_to_xyz(comment))
 
     def cluster_segments_into_segmenttypes(self, descriptors, descriptor_ranges, molecule_index = -1, add_bounds_to_first_descriptor = True, segment_type_areas = None, segment_types = None):
         # descriptors needs to be a list of [ndarray of shape (n_segments, 1) or (n_segments,)]

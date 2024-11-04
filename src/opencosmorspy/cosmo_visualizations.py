@@ -5,6 +5,8 @@ import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+import rdkit.Chem
+import rdkit.Chem.rdDetermineBonds
 
 import opencosmorspy.segtp_collection as stpc
 from opencosmorspy.parameterization import Parameterization
@@ -350,6 +352,121 @@ def plot_extended_sigmaprofiles_plotly(dir_plot, filepath, qc_program,
     if mode == 'dynamic':
         fig.write_html(os.path.join(dir_plot, plot_name+'.html'))
 
+
+def plot_cosmo_surface(parser, mode='dynamic', dir_plot='.', plot_name='cosmo_surface'):
+    """Plot a COSMO surface with atoms and bonds.
+
+    Example usage:
+    parser = SigmaProfileParser('path/to/simulation.orcacosmo', qc_program='orca')
+    plot_cosmo_surface_with_atoms_and_bonds(parser)"""
+
+    
+    mol = rdkit.Chem.MolFromXYZBlock(parser.save_to_xyz())
+    rdkit.Chem.rdDetermineBonds.DetermineBonds(mol, charge=0)
+    if mol is None:
+        raise ValueError("Unable to load molecule from XYZ file.")
+
+    fig = go.Figure(data=[go.Scatter3d(
+        x=parser['seg_pos'][:, 0],
+        y=parser['seg_pos'][:, 1],
+        z=parser['seg_pos'][:, 2],
+        mode='markers',
+        marker=dict(
+            size=parser['seg_area'] * 50,  # Scale the size for better visualization
+            color=parser['seg_charge'],  # Set the color based on charge
+            colorscale='bluered',  # Color scale for charges
+            colorbar=dict(title="Charge"),
+            opacity=0.8
+        ),
+        name=None,
+        showlegend=False
+    )])
+
+    element_colors = {
+        'H': 'green',      # Hydrogen
+        'C': 'black',      # Carbon
+        'N': 'blue',       # Nitrogen
+        'O': 'red',        # Oxygen
+        'S': 'yellow',     # Sulfur
+        'P': 'orange',     # Phosphorus
+        'F': 'light green',# Fluorine
+        'Cl': 'green',     # Chlorine
+        'Br': 'brown',     # Bromine
+        'I': 'purple',     # Iodine
+        'He': 'cyan',      # Helium
+        'Ne': 'cyan',      # Neon
+        'Ar': 'cyan',      # Argon
+        'Li': 'dark red',  # Lithium
+        'Na': 'blue',      # Sodium
+        'K': 'purple',     # Potassium
+        'Ca': 'dark green',# Calcium
+        'Fe': 'orange',    # Iron
+        'Mg': 'gray'       # Magnesium
+    }
+
+    # Add bonds as lines (RDKit automatically infers bonds from 3D structure)
+    for bond in mol.GetBonds():
+        i = bond.GetBeginAtomIdx()
+        j = bond.GetEndAtomIdx()
+        
+        # Add bond (line) between the two atoms
+        fig.add_trace(go.Scatter3d(
+            x=[parser['atm_pos'][i, 0], parser['atm_pos'][j, 0]],
+            y=[parser['atm_pos'][i, 1], parser['atm_pos'][j, 1]],
+            z=[parser['atm_pos'][i, 2], parser['atm_pos'][j, 2]],
+            mode='lines',
+            line=dict(color='black', width=10),
+            showlegend=False
+        ))
+
+    # Add spheres for each atom (after bonds to ensure Z-order)
+    for i, element in enumerate(parser['atm_elmnt']):
+        # Get atomic position and radius
+        x_atm = parser['atm_pos'][i, 0]
+        y_atm = parser['atm_pos'][i, 1]
+        z_atm = parser['atm_pos'][i, 2]
+        radius = parser['atm_rad'][i]
+        
+        # Get the color for the current element
+        color = element_colors.get(element, 'orange')  # Default to green if element not found
+
+        # Add a sphere for the atom
+        fig.add_trace(go.Scatter3d(
+            x=[x_atm],
+            y=[y_atm],
+            z=[z_atm],
+            mode='markers',
+            marker=dict(
+                size=radius * 10,  # Scale radius for better visualization
+                color=color
+            ),
+            name=None,
+            showlegend=False  # Don't clutter the legend with atom labels
+        ))
+
+    # Add labels and titles
+    fig.update_layout(
+        scene=dict(
+            xaxis_title='X Position',
+            yaxis_title='Y Position',
+            zaxis_title='Z Position'
+        ),
+        width=800,
+        height=800
+    )
+
+    # Remove grid lines
+    fig.update_scenes(xaxis_showgrid=False, yaxis_showgrid=False, zaxis_showgrid=False)
+
+    # Show the plot
+    fig.show()
+
+    if mode == 'static':
+        fig.write_image(os.path.join(dir_plot, plot_name+'.png'))
+        fig.write_image(os.path.join(dir_plot, plot_name+'.pdf'))
+        fig.write_image(os.path.join(dir_plot, plot_name+'.svg'))
+    if mode == 'dynamic':
+        fig.write_html(os.path.join(dir_plot, plot_name+'.html'))
 
 if __name__ == '__main__':
     pass

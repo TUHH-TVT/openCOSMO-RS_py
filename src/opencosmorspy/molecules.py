@@ -117,7 +117,7 @@ class COSMOStruct(object):
         self.seg_pos = cosmo_info['seg_pos']
         self.seg_charge = cosmo_info['seg_charge']
         self.seg_area = cosmo_info['seg_area']
-        self.seg_sigma_raw = cosmo_info['seg_sigma_raw'] if cosmo_info['seg_sigma_raw'].size != 0 else cosmo_info['seg_sigma_raw_uncorrected']
+        self.seg_sigma_raw = cosmo_info['seg_sigma_raw'] if len(cosmo_info['seg_sigma_raw']) != 0 else cosmo_info['seg_sigma_raw_uncorrected']
         self.seg_potential = cosmo_info['seg_potential']
 
         # Define missing properties

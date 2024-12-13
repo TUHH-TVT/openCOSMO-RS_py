@@ -16,6 +16,7 @@ class Parameterization(object):
             self._get_default_turbomole()
         if name == 'default_orca':
             self._get_default_orca()
+        self.name = name
 
     def _get_default_turbomole(self):
 
@@ -121,41 +122,41 @@ class Parameterization(object):
         pass
 
     def __str__(self):
+        attributes = vars(self)
+        max_key_length = max(len(key) for key in attributes)
+        formatted_attributes = "\n".join(f"{key.rjust(max_key_length)} : {value}" for key, value in attributes.items())
+        return f"{self.name}:\n{formatted_attributes}"
 
-        text = 'qc_program             : {}\n'.format(self.qc_program)
-        text += ('descriptors            : ' +
-                 ', '.join(self.descriptor_lst)+' \n')
-        text += 'a_eff                  : {:.3f}\n'.format(self.a_eff)
-        text += 'r_av                   : {:.3f}\n'.format(self.r_av)
-        text += 'sigma_step             : {}\n'.format(self.sigma_step)
-        text += 'sigma_orth_step        : {}\n'.format(self.sigma_orth_step)
-        text += 'mf_use_sigma_orth      : {}\n'.format(self.mf_use_sigma_orth)
-        text += 'mf_alpha               : {:13.6e}\n'.format(self.mf_alpha)
-        text += 'mf_r_av_corr           : {:.3f}\n'.format(self.mf_r_av_corr)
-        text += 'mf_f_corr              : {:.3f}\n'.format(self.mf_f_corr)
-        text += 'hb_term                : {}\n'.format(self.hb_term)
-        text += 'hb_c                   : {:13.6e}\n'.format(self.hb_c)
-        text += 'hb_c_T                 : {:.3f}\n'.format(self.hb_c_T)
-        text += 'hb_sigma_thresh        : {:.6f}\n'.format(
-            self.hb_sigma_thresh)
-        text += 'hb_don_elmnt_nr_arr    : {}\n'.format(
-            self.hb_don_elmnt_nr_arr)
-        text += 'hb_acc_elmnt_nr_arr    : {}\n'.format(
-            self.hb_acc_elmnt_nr_arr)
-        text += 'hb_pref_arr            : {}\n'.format(self.hb_pref_arr)
-        text += 'comb_term              : {}\n'.format(self.comb_term)
-        text += 'comb_sg_z_coord        : {:3f}\n'.format(self.comb_sg_z_coord)
-        text += 'comb_sg_a_std          : {:4f}\n'.format(self.comb_sg_a_std)
-        if self.comb_term == 'staverman_guggenheim_exponential_scaling':
-            text += ('comb_sg_expsc_exponent : {:4f}\n'.
-                     format(self.comb_sg_expsc_exponent))
-    
-        text += 'calculate_contact_statistics_molecule_properties : {}\n'.format(
-            self.calculate_contact_statistics_molecule_properties)
-        
-        text += 'cosmospace_max_iter : {}\n'.format(
-            self.cosmospace_max_iter)
-        text += 'cosmospace_conv_thresh : {:.6e}\n'.format(
-            self.cosmospace_conv_thresh)
-        
-        return text
+
+class openCOSMORS24a(Parameterization):
+    def __init__(self):
+        super().__init__('default_orca')
+        self.name = '24a'
+
+        self.hb_don_elmnt_nr_arr = np.array(
+            [1]+[entry for entry in range(1, 151, 1)])
+        self.hb_acc_elmnt_nr_arr = np.array(
+            [1]+[entry for entry in range(1, 151, 1)])
+        self.hb_pref_arr = np.ones(201, dtype='float')
+
+        # parameters different then default_orca
+        self.a_eff = 5.9248470  # Å²
+        self.mf_alpha = 7.2847361e+06  # J/mol Å² e²
+        self.hb_c = 4.3311555e+07  # J/mol Å² e²
+        self.hb_sigma_thresh = 9.6112460e-03  # e/Å²
+      
+        self.comb_sg_a_std = 4.1623570e+01  # Å²
+
+        # solvation energy parameters
+        self.tau_1 = 0.123  # kJ/mol Å²
+        self.tau_6 = 0.096  # kJ/mol Å²
+        self.tau_7 = 0.003  # kJ/mol Å²
+        self.tau_8 = 0.015  # kJ/mol Å²
+        self.tau_9 = 0.023  # kJ/mol Å²
+        self.tau_17 = 0.143  # kJ/mol Å²
+        self.tau_35 = 0.171  # kJ/mol Å²
+        self.tau_14 = 0.018  # kJ/mol Å²
+        self.tau_15 = 0.015  # kJ/mol Å²
+        self.tau_16 = 0.146  # kJ/mol Å²
+        self.eta = -18.61  # kJ/mol
+        self.omega_ring = 1.100  # kJ/mol

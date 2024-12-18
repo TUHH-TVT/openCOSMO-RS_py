@@ -19,7 +19,8 @@ class SigmaProfileParser(UserDict):
     def __init__(self, filepath, qc_program=None, *, calculate_averaged_sigmas=False):
 
         if qc_program is None:
-            if filepath.lower().endswith('.cosmo'):
+            ext = os.path.splitext(filepath)[-1]
+            if ext.lower().startswith('.cosmo'):
                 qc_program = 'turbomole'
             else:
                 qc_program = 'orca'

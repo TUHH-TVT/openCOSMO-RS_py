@@ -325,7 +325,7 @@ class SigmaProfileParser(UserDict):
         if sigmas is None:
             if 'seg_sigma_averaged' not in self:
                 self.calculate_averaged_sigmas()
-                sigmas = self['seg_sigma_averaged']
+            sigmas = self['seg_sigma_averaged']
 
         # Zeroth Moment (total surface)
         # First Moment (charge)

@@ -1,8 +1,5 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-'''
-Created on Thu Feb  4 20:31:24 2021
-'''
 
 import os
 import re
@@ -13,7 +10,6 @@ import numpy as np
 kJ_per_kcal = 4.184  # kJ/kcal
 angstrom_per_bohr = 0.52917721092  # angstrom/bohr
 kJdivmol_per_hartree = 2625.499639479  # (kJ/mol)/hartree
-
 
 class SigmaProfileParser(UserDict):
     def __init__(self, filepath, qc_program=None, *, calculate_averaged_sigmas=False):
@@ -387,39 +383,67 @@ class SigmaProfileParser(UserDict):
 
     def _read_turbomole_atom_section(self, cosmofile):
 
-        line = next(cosmofile).strip()
+        line = True
 
+        mode = None
         while line:
             line = next(cosmofile).strip()
-            if line == '$coord_car':
-                break
             line_splt = line.split()
+            if len(line_splt) != 4 and len(line_splt) != 6:
+                if mode:
+                    break
+                else:
+                    continue
 
-            self['atm_nr'].append(int(line_splt[0]) - 1)
+            if not mode:
+                mode = len(line_splt)
 
-            self['atm_pos'].append([float(val) for val in line_splt[1:4]])
-            self['atm_elmnt'].append(line_splt[4].title())
-            self['atm_rad'].append(float(line_splt[5]))
+            if len(line_splt) == 6:
+                atm_nr = int(line_splt[0]) - 1
+                atm_pos = [float(val) for val in line_splt[1:4]]
+                atm_elmnt = line_splt[4].title()
+                atm_rad = float(line_splt[5])
+            elif len(line_splt) == 4:
+                atm_nr = len(self['atm_nr'])
+                atm_pos = [float(val) for val in line_splt[1:4]]
+                atm_elmnt = line_splt[0].title()
+                atm_rad = None
+            else:
+                raise ValueError('Lines shoud either have a length of 4 or 6.')
+
+            self['atm_nr'].append(atm_nr)
+            self['atm_pos'].append(atm_pos)
+            self['atm_elmnt'].append(atm_elmnt)
+            self['atm_rad'].append(atm_rad)
+
+        atm_pos_multiplier = angstrom_per_bohr
+        if mode == 4:
+            atm_pos_multiplier = 1
 
         self['atm_nr'] = np.array(self['atm_nr'], dtype='int64')
         self['atm_pos'] = (
-            np.array(self['atm_pos'], dtype='float64') * angstrom_per_bohr
+            np.array(self['atm_pos'], dtype='float64') * atm_pos_multiplier
         )
         self['atm_rad'] = np.array(self['atm_rad'], dtype='float64')
 
     def _read_turbomole_seg_section(self, cosmofile):
 
-        for ind in range(10):
-            line = next(cosmofile)
+        line = next(cosmofile)
 
         while line:
             try:
                 line = next(cosmofile).strip()
+                line_splt = line.split()
+                if len(line_splt) != 9:
+                    if self['seg_nr']:
+                        break
+                    else:
+                        continue
+                    
             except StopIteration:
                 break
             if not line:
                 break
-            line_splt = line.split()
 
             self['seg_nr'].append(int(line_splt[0]) - 1)
             self['seg_atm_nr'].append(int(line_splt[1]) - 1)
@@ -454,7 +478,7 @@ class SigmaProfileParser(UserDict):
 
         with open(self['filepath'], 'r') as cosmofile:
 
-            for line in cosmofile:
+            for i_line, line in enumerate(cosmofile):
 
                 line = line.strip()
 
@@ -486,7 +510,7 @@ class SigmaProfileParser(UserDict):
                     kJdivmol_per_hartree,
                 )
 
-                if line == '$coord_rad':
+                if line == '$coord_rad' or i_line == 0 and line == '$coord_car':
                     self._read_turbomole_atom_section(cosmofile)
 
                 if line == '$segment_information':
@@ -624,7 +648,12 @@ class SigmaProfileParser(UserDict):
             adjacency_marix.append(line)
 
         self['adjacency_matrix'] = np.array(adjacency_marix, dtype='int')
-
+    
+    def calculate_molecular_dipole(self):
+        if 'dipole_moment' not in self:
+            raise ValueError('The specified input file did not include dipole moment information.')
+        return float(np.linalg.norm(self['dipole_moment']))
+            
     def _read_orcasp(self):
 
         with open(self['filepath'], 'r') as orcasp_file:
@@ -687,7 +716,6 @@ class SigmaProfileParser(UserDict):
 
 class PyCrsError(Exception):
     pass
-
 
 if __name__ == '__main__':
     main()

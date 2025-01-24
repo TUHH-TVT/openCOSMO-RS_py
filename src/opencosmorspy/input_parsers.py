@@ -348,10 +348,7 @@ class SigmaProfileParser(UserDict):
 
         # first step adjusting to manual
         for i in [2, 3, 4]:
-            if i < 1:
-                current_HB_threshold = sigma_hb_threshold
-            else:
-                current_HB_threshold = 0.006 + i * 0.002
+            current_HB_threshold = 0.006 + i * 0.002
 
             sigma_hydrogen_bond_acceptor_moments[i] = np.sum(
                 np.maximum(sigmas - current_HB_threshold, 0) * areas
@@ -360,13 +357,8 @@ class SigmaProfileParser(UserDict):
                 np.maximum(-1 * sigmas - current_HB_threshold, 0) * areas
             )
 
-            if i != 0:
-                sigma_hydrogen_bond_acceptor_moments[i] = (
-                    abs(sigma_hydrogen_bond_acceptor_moments[i]) * 100
-                )
-                sigma_hydrogen_bond_donor_moments[i] = (
-                    abs(sigma_hydrogen_bond_donor_moments[i]) * 100
-                )
+        sigma_hydrogen_bond_acceptor_moments = 100 * np.abs(sigma_hydrogen_bond_acceptor_moments)
+        sigma_hydrogen_bond_donor_moments = 100 * np.abs(sigma_hydrogen_bond_donor_moments)
 
         self['sigma_hydrogen_bond_acceptor_moments'] = (
             sigma_hydrogen_bond_acceptor_moments

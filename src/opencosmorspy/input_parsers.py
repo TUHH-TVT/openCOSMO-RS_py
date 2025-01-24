@@ -346,7 +346,8 @@ class SigmaProfileParser(UserDict):
         sigma_hydrogen_bond_acceptor_moments = np.zeros((n_moments))
         sigma_hydrogen_bond_donor_moments = np.zeros((n_moments))
 
-        for i in range(n_moments):
+        # first step adjusting to manual
+        for i in [2, 3, 4]:
             if i < 1:
                 current_HB_threshold = sigma_hb_threshold
             else:

@@ -15,7 +15,7 @@ from opencosmorspy.parameterization import Parameterization
 class SegtpCollection(object):
     def __init__(self, par):
 
-        self.par =  par
+        self.par = par
         self.segtp_lst = []
 
     def __iter__(self):
@@ -32,32 +32,37 @@ class SegtpCollection(object):
         seg_segtp_assignment_lst = []
 
         for idx_seg, (sigma, sigma_orth, elmnt_nr, group) in enumerate(
-                zip(cosmo_struct.seg_sigma,
-                    cosmo_struct.seg_sigma_orth,
-                    cosmo_struct.seg_elmnt_nr,
-                    cosmo_struct.seg_group)):
+            zip(
+                cosmo_struct.seg_sigma,
+                cosmo_struct.seg_sigma_orth,
+                cosmo_struct.seg_elmnt_nr,
+                cosmo_struct.seg_group,
+            )
+        ):
 
             if sigma < 0 and elmnt_nr in self.par.hb_don_elmnt_nr_arr:
                 hbd_sw = True
             else:
                 hbd_sw = False
 
-            if sigma  >= 0 and elmnt_nr in self.par.hb_acc_elmnt_nr_arr:
+            if sigma >= 0 and elmnt_nr in self.par.hb_acc_elmnt_nr_arr:
                 hba_sw = True
             else:
                 hba_sw = False
 
             segment = {
-                'sigma': sigma,
-                'sigma_orth': sigma_orth,
-                'elmnt_nr': elmnt_nr,
-                'hbd_sw': hbd_sw,
-                'hba_sw': hba_sw,
-                'group': group,
-                'mol_charge': round(-cosmo_struct.screen_charge)}
+                "sigma": sigma,
+                "sigma_orth": sigma_orth,
+                "elmnt_nr": elmnt_nr,
+                "hbd_sw": hbd_sw,
+                "hba_sw": hba_sw,
+                "group": group,
+                "mol_charge": round(-cosmo_struct.screen_charge),
+            }
 
             segtp_lst_new, segtp_frac_lst = cluster_segment(
-                segment, sigma_grid, sigma_orth_grid, self.par.descriptor_lst)
+                segment, sigma_grid, sigma_orth_grid, self.par.descriptor_lst
+            )
 
             seg_segtp_assignment = {}
 
@@ -79,8 +84,9 @@ class SegtpCollection(object):
         segtp_arr_dct = {}
         descriptors = self.segtp_lst[0].keys()
         for descriptor in descriptors:
-            segtp_arr_dct[descriptor] = np.array([segtp[descriptor] for segtp
-                                                  in self.segtp_lst])
+            segtp_arr_dct[descriptor] = np.array(
+                [segtp[descriptor] for segtp in self.segtp_lst]
+            )
 
         return segtp_arr_dct
 
@@ -88,40 +94,39 @@ class SegtpCollection(object):
 def cluster_segment(segment, sigma_grid, sigma_orth_grid, descriptor_lst):
     """
 
-        segment = {
-            'sigma': 0.003,
-            'sigma_orth': 0.004,
-            'elmnt_nr': 0.002,
-            'group': None,
-            'mol_charge': 0}
+    segment = {
+        'sigma': 0.003,
+        'sigma_orth': 0.004,
+        'elmnt_nr': 0.002,
+        'group': None,
+        'mol_charge': 0}
     """
 
-    handled_descriptors = ['sigma', 'sigma_orth', 'elmnt_nr', 'group',
-                           'mol_charge']
+    handled_descriptors = ["sigma", "sigma_orth", "elmnt_nr", "group", "mol_charge"]
 
-    unhandled_descriptors = list(set(descriptor_lst) -
-                                 set(handled_descriptors))
+    unhandled_descriptors = list(set(descriptor_lst) - set(handled_descriptors))
 
     if unhandled_descriptors:
-        raise ValueError('Unhandled descriptors encountered')
+        raise ValueError("Unhandled descriptors encountered")
 
-    if 'sigma' not in descriptor_lst:
-        raise ValueError('Sigma must be included as descriptor')
+    if "sigma" not in descriptor_lst:
+        raise ValueError("Sigma must be included as descriptor")
 
     segtp_frac_lst = [1.0]
     segtp_lst = [segment]
 
-    if 'sigma' in descriptor_lst:
+    if "sigma" in descriptor_lst:
         segtp_lst, segtp_frac_lst = _cluster_float_var(
-            'sigma', sigma_grid, segtp_lst, segtp_frac_lst)
+            "sigma", sigma_grid, segtp_lst, segtp_frac_lst
+        )
 
-    if 'sigma_orth' in descriptor_lst:
+    if "sigma_orth" in descriptor_lst:
         segtp_lst, segtp_frac_lst = _cluster_float_var(
-            'sigma_orth', sigma_orth_grid, segtp_lst, segtp_frac_lst)
+            "sigma_orth", sigma_orth_grid, segtp_lst, segtp_frac_lst
+        )
 
     # Delete unused descriptors
-    unused_descriptors = list(set(handled_descriptors) -
-                              set(descriptor_lst))
+    unused_descriptors = list(set(handled_descriptors) - set(descriptor_lst))
     for descriptor in unused_descriptors:
         for segtp in segtp_lst:
             del segtp[descriptor]
@@ -132,8 +137,7 @@ def cluster_segment(segment, sigma_grid, sigma_orth_grid, descriptor_lst):
 def _cluster_float_var(var_name, var_grid, segtp_lst, segtp_frac_lst):
 
     if var_name not in segtp_lst[0]:
-        raise ValueError('Cannot cluster unknown variable {:s}'.
-                         format(var_name))
+        raise ValueError("Cannot cluster unknown variable {:s}".format(var_name))
 
     gridstep = np.abs(var_grid[1] - var_grid[0])
 
@@ -144,26 +148,25 @@ def _cluster_float_var(var_name, var_grid, segtp_lst, segtp_frac_lst):
 
         val = segtp[var_name]
         idx_right = np.searchsorted(var_grid, val, side="left")
-        idx_left = idx_right-1
+        idx_left = idx_right - 1
         val_right = var_grid[idx_right]
         val_left = var_grid[idx_left]
 
-        if idx_left < 0 or idx_right > len(var_grid)-1:
-            raise ValueError('Encountered {} outside of bins'.format(var_name))
+        if idx_left < 0 or idx_right > len(var_grid) - 1:
+            raise ValueError("Encountered {} outside of bins".format(var_name))
 
-        frac_left = (val_right - val)/gridstep
-        segtp_frac_lst_new.append(segtp_frac*frac_left)
+        frac_left = (val_right - val) / gridstep
+        segtp_frac_lst_new.append(segtp_frac * frac_left)
         segtp_lst_new.append(segtp.copy())
         segtp_lst_new[-1][var_name] = val_left
 
-        segtp_frac_lst_new.append(segtp_frac*(1-frac_left))
+        segtp_frac_lst_new.append(segtp_frac * (1 - frac_left))
         segtp_lst_new.append(segtp.copy())
         segtp_lst_new[-1][var_name] = val_right
 
     return segtp_lst_new, segtp_frac_lst_new
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
 
     pass
-

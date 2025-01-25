@@ -81,268 +81,75 @@ class SigmaProfileParser(UserDict):
         with open(filepath_xyz, "w") as xyzf:
             xyzf.write(self.save_to_xyz(comment))
 
-    def cluster_segments_into_segmenttypes(
-        self,
-        descriptors,
-        descriptor_ranges,
-        molecule_index=-1,
-        add_bounds_to_first_descriptor=True,
-        segment_type_areas=None,
-        segment_types=None,
-    ):
-        # descriptors needs to be a list of [ndarray of shape (n_segments, 1) or (n_segments,)]
-        # descriptor_ranges needs to be a list of [ndarray of shape (n_segments, 1) or (n_segments,)]
+    def cluster_segments_into_segmenttypes(self, descriptors, descriptor_ranges):
+        areas = self['seg_area']
+        if len(descriptors) != len(descriptor_ranges):
+            raise ValueError('descriptors and descriptor_ranges have to have same length.')
+        
+        # descriptor_ranges are assumed to be float, equidistant and sorted or integer and sorted
+        descriptor_types = [descriptor_range.dtype for descriptor_range in descriptor_ranges]
+        if not all([dt == float or dt == int for dt in descriptor_types]):
+            raise TypeError('Only int or float descriptors are supported right now.')
 
-        areas = self["seg_area"]
-        n_segments = areas.size
-        n_descriptors = len(descriptor_ranges)
+        descriptors = np.transpose(np.array(descriptors))
+        n_descriptors = descriptors.shape[1]
 
-        descriptors_temp = np.zeros((n_segments, 0))
+        def cluster_segments_to_segment_types_for_one_descriptor(segments_descriptors, segments_area, i_descriptor_to_cluster):
+            segment_types_descriptors = []
+            segment_type_areas = []
+            i_descriptor_range = descriptor_ranges[i_descriptor_to_cluster]
+            for segment_descriptors, segment_area in zip(segments_descriptors, segments_area, strict=True):
+                descriptor_value = segment_descriptors[i_descriptor_to_cluster]
 
-        for i_descriptor in range(0, n_descriptors):
-            descriptors_temp = np.hstack(
-                (descriptors_temp, descriptors[i_descriptor].reshape((n_segments, 1)))
-            )
-            descriptor_range = descriptor_ranges[i_descriptor]
-            if descriptor_range is None:
-                descriptor_ranges[i_descriptor] = np.unique(
-                    descriptors_temp[:, i_descriptor]
-                )
+                ind_left = np.argmax(i_descriptor_range >= descriptor_value) - 1
+                left_clustered_descriptor_value = i_descriptor_range[ind_left]
+                left_new_segment_type_descriptors = segment_descriptors.copy()
+                left_new_segment_type_descriptors[i_descriptor_to_cluster] = left_clustered_descriptor_value
+                segment_types_descriptors.append(left_new_segment_type_descriptors)
 
-        descriptors = descriptors_temp
-
-        if segment_types is None:
-            segment_types = np.zeros((0, n_descriptors))
-
-        n_segment_types = segment_types.shape[0]
-
-        n_max_molecules = 1
-
-        if molecule_index != -1:
-            n_max_molecules = molecule_index + 1
-        else:
-            molecule_index = 0
-
-        if segment_type_areas is None:
-            segment_type_areas = np.zeros((0, n_max_molecules))
-        else:
-            segment_type_areas.resize((n_segment_types, n_max_molecules))
-
-        for i_area in range(0, n_segments):
-
-            A = areas[i_area]
-
-            segmentsFor_i_area = np.zeros((1, n_descriptors + 1))
-
-            segmentsFor_i_area[0, 0] = A
-
-            for i_descriptor in range(0, n_descriptors):
-
-                descriptor_value = descriptors[i_area, i_descriptor]
-                descriptor_range = descriptor_ranges[i_descriptor]
-
-                ind_left = np.flatnonzero(descriptor_range <= descriptor_value).max()
-
-                n_segmentsFor_i_area = segmentsFor_i_area.shape[0]
-                if descriptor_range[ind_left] == descriptor_value:
-                    for i_segment in range(0, n_segmentsFor_i_area):
-                        segmentsFor_i_area[i_segment, i_descriptor + 1] = (
-                            descriptor_range[ind_left]
-                        )
+                if left_clustered_descriptor_value == descriptor_value:
+                    segment_type_areas.append(segment_area)
                 else:
-                    newSegmentsFor_i_area = np.zeros((1, n_descriptors + 1))
+                    right_new_segment_type_descriptors = segment_descriptors.copy()
+                    right_clustered_descriptor_value = i_descriptor_range[ind_left + 1]
+                    clustered_delta = right_clustered_descriptor_value - left_clustered_descriptor_value
+                    right_new_segment_type_descriptors[i_descriptor_to_cluster] = right_clustered_descriptor_value
+                    segment_types_descriptors.append(right_new_segment_type_descriptors)
+                    segment_type_areas.append(segment_area * ((right_clustered_descriptor_value - descriptor_value)/clustered_delta))
+                    segment_type_areas.append(segment_area * ((descriptor_value - left_clustered_descriptor_value)/clustered_delta))
 
-                    n_newSegmentsFor_i_area = 0
+            return segment_types_descriptors, segment_type_areas
 
-                    for i_segment in range(0, n_segmentsFor_i_area):
+        all_segment_types = []
+        all_segment_type_areas = []
 
-                        newSegmentsFor_i_area.resize(
-                            (n_newSegmentsFor_i_area + 2, n_descriptors + 1),
-                            refcheck=False,
-                        )
+        for i_segment_descriptors, i_segment_area in zip(descriptors, areas, strict=True):
 
-                        segmentsFor_i_area_A = segmentsFor_i_area[i_segment, 0]
+            segments_types, segments_types_areas = [i_segment_descriptors.tolist()], [i_segment_area]
 
-                        right_factor = (
-                            descriptor_value - descriptor_range[ind_left]
-                        ) / (
-                            descriptor_range[ind_left + 1] - descriptor_range[ind_left]
-                        )
-                        left_factor = (
-                            descriptor_range[ind_left + 1] - descriptor_value
-                        ) / (
-                            descriptor_range[ind_left + 1] - descriptor_range[ind_left]
-                        )
+            for i_descriptor in range(n_descriptors):
+                segments_types, segments_types_areas = cluster_segments_to_segment_types_for_one_descriptor(segments_types, segments_types_areas, i_descriptor)
 
-                        # left
-                        newSegmentsFor_i_area[n_newSegmentsFor_i_area, :] = (
-                            segmentsFor_i_area[i_segment, :]
-                        )
-                        newSegmentsFor_i_area[n_newSegmentsFor_i_area, 0] = (
-                            left_factor * segmentsFor_i_area_A
-                        )
-                        newSegmentsFor_i_area[
-                            n_newSegmentsFor_i_area, i_descriptor + 1
-                        ] = descriptor_range[ind_left]
+            for segment_type, segment_type_area in zip(segments_types, segments_types_areas, strict=True):
+                if segment_type not in all_segment_types:
+                    all_segment_types.append(segment_type)
+                    all_segment_type_areas.append(0)
 
-                        # right
-                        n_newSegmentsFor_i_area += 1
-                        newSegmentsFor_i_area[n_newSegmentsFor_i_area, :] = (
-                            segmentsFor_i_area[i_segment, :]
-                        )
-                        newSegmentsFor_i_area[n_newSegmentsFor_i_area, 0] = (
-                            right_factor * segmentsFor_i_area_A
-                        )
-                        newSegmentsFor_i_area[
-                            n_newSegmentsFor_i_area, i_descriptor + 1
-                        ] = descriptor_range[ind_left + 1]
+                segment_type_index = all_segment_types.index(segment_type)
+                all_segment_type_areas[segment_type_index] += segment_type_area
 
-                    segmentsFor_i_area = newSegmentsFor_i_area
+        all_segment_types = np.array(all_segment_types)
+        all_segment_type_areas = np.array(all_segment_type_areas)
 
-            n_segmentsFor_i_area = segmentsFor_i_area.shape[0]
+        # sort
+        descriptors = [all_segment_types[:, i].tolist() for i in range(n_descriptors)]
+        descriptors.reverse()
+        sorted_indices = np.lexsort(descriptors)
 
-            for i_segment in range(0, n_segmentsFor_i_area):
-
-                i_segment_type_new = -1
-                A = segmentsFor_i_area[i_segment, 0]
-
-                for i_segment_type in range(0, n_segment_types):
-
-                    if np.all(
-                        segment_types[i_segment_type, :]
-                        == segmentsFor_i_area[
-                            i_segment, np.arange(1, segmentsFor_i_area.shape[1])
-                        ]
-                    ):
-                        i_segment_type_new = i_segment_type
-                        break
-
-                if i_segment_type_new == -1:
-
-                    i_segment_type_new = n_segment_types
-                    n_segment_types += 1
-
-                    segment_types.resize(
-                        (n_segment_types, n_descriptors), refcheck=False
-                    )
-                    segment_type_areas.resize(
-                        (n_segment_types, n_max_molecules), refcheck=False
-                    )
-
-                    segment_types[i_segment_type_new, :] = segmentsFor_i_area[
-                        i_segment, np.arange(1, segmentsFor_i_area.shape[1])
-                    ]
-
-                segment_type_areas[i_segment_type_new, molecule_index] += A
-
-        if n_descriptors > 1:
-            new_column_order = np.arange(1, segment_types.shape[1])
-            new_column_order = np.append(new_column_order, 0)
-            new_column_order = np.flip(
-                new_column_order
-            )  # necessary because lexsort somehow searches the columns in reverse
-
-            sorted_indices = np.lexsort(segment_types.transpose()[new_column_order])
-        else:
-            sorted_indices = np.argsort(segment_types, axis=0)
-
-        segment_types = segment_types[sorted_indices]
-        segment_type_areas = segment_type_areas[sorted_indices]
-
-        n_segment_types = segment_type_areas.size
-
-        if add_bounds_to_first_descriptor:
-
-            step_between_first_descriptor_values = (
-                segment_types[1, 0] - segment_types[0, 0]
-            )  # this assumed at least 2 segment types
-
-            if n_descriptors > 1:
-                n_different_descriptor_combinations = np.unique(
-                    segment_types[:, np.arange(1, n_descriptors)], axis=0
-                ).shape[0]
-                n_segment_types_with_bounds = segment_type_areas.size + (
-                    2 * n_different_descriptor_combinations
-                )
-
-                new_segment_types = np.zeros(
-                    (n_segment_types_with_bounds, n_descriptors)
-                )
-                new_segment_type_areas = np.zeros((n_segment_types_with_bounds, 1))
-
-                last_second_descriptor_value = np.inf
-                n_extra_segment_types_due_to_bounds = 0
-
-                for i_segment_type in range(0, n_segment_types):
-
-                    # add starting value
-                    if i_segment_type == 0:
-                        last_second_descriptor_value = np.nan
-                    else:
-                        last_second_descriptor_value = segment_types[
-                            i_segment_type - 1, 1
-                        ]
-
-                    if last_second_descriptor_value != segment_types[i_segment_type, 1]:
-                        new_segment_types[
-                            i_segment_type + n_extra_segment_types_due_to_bounds, :
-                        ] = segment_types[i_segment_type, :]
-                        new_segment_types[
-                            i_segment_type + n_extra_segment_types_due_to_bounds, 0
-                        ] -= step_between_first_descriptor_values
-                        new_segment_type_areas[
-                            i_segment_type + n_extra_segment_types_due_to_bounds, 0
-                        ] = 0
-                        n_extra_segment_types_due_to_bounds += 1
-
-                    # add normal values
-                    new_segment_types[
-                        i_segment_type + n_extra_segment_types_due_to_bounds, :
-                    ] = segment_types[i_segment_type, :]
-                    new_segment_type_areas[
-                        i_segment_type + n_extra_segment_types_due_to_bounds, 0
-                    ] = segment_type_areas[i_segment_type, 0]
-
-                    # add ending value
-                    if i_segment_type < n_segment_types - 1:
-                        next_second_descriptor_value = segment_types[
-                            i_segment_type + 1, 1
-                        ]
-                    else:
-                        next_second_descriptor_value = np.nan
-
-                    if segment_types[i_segment_type, 1] != next_second_descriptor_value:
-                        n_extra_segment_types_due_to_bounds += 1
-                        new_segment_types[
-                            i_segment_type + n_extra_segment_types_due_to_bounds, :
-                        ] = segment_types[i_segment_type, :]
-                        new_segment_types[
-                            i_segment_type + n_extra_segment_types_due_to_bounds, 0
-                        ] += step_between_first_descriptor_values
-                        new_segment_type_areas[
-                            i_segment_type + n_extra_segment_types_due_to_bounds, 0
-                        ] = 0
-
-            else:
-                n_segment_types_with_bounds = segment_type_areas.size + 2
-                new_segment_types = np.zeros(
-                    (n_segment_types_with_bounds, n_descriptors)
-                )
-                new_segment_type_areas = np.zeros((n_segment_types_with_bounds, 1))
-
-                new_segment_types[0, :] = segment_types[0, :]
-                new_segment_types[0, 0] -= step_between_first_descriptor_values
-
-                new_segment_types[1:-1, :] = segment_types[:, 0]
-                new_segment_type_areas[1:-1, :] = segment_type_areas[:, 0]
-
-                new_segment_types[-1, :] = segment_types[-1, :]
-                new_segment_types[-1, 0] += step_between_first_descriptor_values
-
-            segment_type_areas = new_segment_type_areas
-            segment_types = new_segment_types
-
-        return segment_types, segment_type_areas
+        all_segment_types = all_segment_types[sorted_indices]
+        all_segment_type_areas = all_segment_type_areas[sorted_indices]
+        
+        return all_segment_types, all_segment_type_areas
 
     def cluster_and_create_sigma_profile(
         self, sigmas="seg_sigma_averaged", sigmas_range=np.arange(-0.03, 0.03, 0.001)
@@ -358,6 +165,8 @@ class SigmaProfileParser(UserDict):
         clustered_sigmas, clustered_areas = self.cluster_segments_into_segmenttypes(
             descriptors, descriptor_ranges
         )
+        clustered_sigmas = clustered_sigmas.reshape(-1)
+        
         for sigma in sigmas_range:
             area = 0.0
             if sigma in clustered_sigmas:

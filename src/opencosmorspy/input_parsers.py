@@ -98,7 +98,7 @@ class SigmaProfileParser(UserDict):
             segment_types_descriptors = []
             segment_type_areas = []
             i_descriptor_range = descriptor_ranges[i_descriptor_to_cluster]
-            for segment_descriptors, segment_area in zip(segments_descriptors, segments_area, strict=True):
+            for segment_descriptors, segment_area in zip(segments_descriptors, segments_area):
                 descriptor_value = segment_descriptors[i_descriptor_to_cluster]
 
                 ind_left = np.argmax(i_descriptor_range >= descriptor_value) - 1
@@ -123,14 +123,14 @@ class SigmaProfileParser(UserDict):
         all_segment_types = []
         all_segment_type_areas = []
 
-        for i_segment_descriptors, i_segment_area in zip(descriptors, areas, strict=True):
+        for i_segment_descriptors, i_segment_area in zip(descriptors, areas):
 
             segments_types, segments_types_areas = [i_segment_descriptors.tolist()], [i_segment_area]
 
             for i_descriptor in range(n_descriptors):
                 segments_types, segments_types_areas = cluster_segments_to_segment_types_for_one_descriptor(segments_types, segments_types_areas, i_descriptor)
 
-            for segment_type, segment_type_area in zip(segments_types, segments_types_areas, strict=True):
+            for segment_type, segment_type_area in zip(segments_types, segments_types_areas):
                 if segment_type not in all_segment_types:
                     all_segment_types.append(segment_type)
                     all_segment_type_areas.append(0)
@@ -238,6 +238,10 @@ class SigmaProfileParser(UserDict):
         sigma_hydrogen_bond_donor_moments = np.zeros((n_moments))
 
         # first step adjusting to manual
+        # only calculate:
+            # Second Moment
+            # Third Moment
+            # Fourth Moment
         for i in [2, 3, 4]:
             current_HB_threshold = 0.006 + i * 0.002
 

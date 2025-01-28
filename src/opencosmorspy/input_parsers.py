@@ -101,7 +101,7 @@ class SigmaProfileParser(UserDict):
             for segment_descriptors, segment_area in zip(segments_descriptors, segments_area):
                 descriptor_value = segment_descriptors[i_descriptor_to_cluster]
 
-                ind_left = np.argmax(i_descriptor_range >= descriptor_value) - 1
+                ind_left = np.argmax(descriptor_value <= i_descriptor_range)
                 left_clustered_descriptor_value = i_descriptor_range[ind_left]
                 left_new_segment_type_descriptors = segment_descriptors.copy()
                 left_new_segment_type_descriptors[i_descriptor_to_cluster] = left_clustered_descriptor_value

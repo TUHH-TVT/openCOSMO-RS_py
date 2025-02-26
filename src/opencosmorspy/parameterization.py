@@ -144,16 +144,20 @@ class openCOSMORS24a(Parameterization):
 
         self.comb_sg_a_std = 4.1623570e01  # Å²
 
-        # solvation energy parameters
-        self.tau_1 = 0.123  # kJ/mol Å²
-        self.tau_6 = 0.096  # kJ/mol Å²
-        self.tau_7 = 0.003  # kJ/mol Å²
-        self.tau_8 = 0.015  # kJ/mol Å²
-        self.tau_9 = 0.023  # kJ/mol Å²
-        self.tau_17 = 0.143  # kJ/mol Å²
-        self.tau_35 = 0.171  # kJ/mol Å²
-        self.tau_14 = 0.018  # kJ/mol Å²
-        self.tau_15 = 0.015  # kJ/mol Å²
-        self.tau_16 = 0.146  # kJ/mol Å²
-        self.eta = -18.61  # kJ/mol
-        self.omega_ring = 1.100  # kJ/mol
+        # the solvation energy parameters
+        # in the original optimization were in kcal/mol
+        # as all of the data was in kcal/mol
+        # values in the paper were given in kJ/mol
+        # for consistency purposes
+        self.tau_1 = 2.933803e-02  # kcal/mol Å²
+        self.tau_6 = 2.287904e-02  # kcal/mol Å²
+        self.tau_7 = 7.007681e-04  # kcal/mol Å²
+        self.tau_8 = 3.545052e-03  # kcal/mol Å²
+        self.tau_9 = 5.608829e-03  # kcal/mol Å²
+        self.tau_17 = 3.414282e-02  # kcal/mol Å²
+        self.tau_35 = 4.085111e-02  # kcal/mol Å²
+        self.tau_14 = 4.215503e-03  # kcal/mol Å²
+        self.tau_15 = 3.607977e-03  # kcal/mol Å²
+        self.tau_16 = 3.498700e-02  # kcal/mol Å²
+        self.eta = -4.448499e+00 # kcal/mol
+        self.omega_ring = 2.6302510E-01  # kcal/mol

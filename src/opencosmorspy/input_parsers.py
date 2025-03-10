@@ -350,7 +350,7 @@ class SigmaProfileParser(UserDict):
         self["seg_area"] = np.array(self["seg_area"], dtype="float64")
         self["seg_sigma_raw"] = np.array(self["seg_sigma_raw"], dtype="float64")
         self["seg_potential"] = (
-            np.array(self["seg_potential"], dtype="float64") * kJdivmol_per_hartree
+            np.array(self["seg_potential"], dtype="float64") * kJdivmol_per_hartree * angstrom_per_bohr
         )
 
     def _read_turbomolesp(self):

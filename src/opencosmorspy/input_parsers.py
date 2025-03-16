@@ -348,7 +348,7 @@ class SigmaProfileParser(UserDict):
         self["seg_pos"] = np.array(self["seg_pos"], dtype="float64") * angstrom_per_bohr
         self["seg_charge"] = np.array(self["seg_charge"], dtype="float64")
         self["seg_area"] = np.array(self["seg_area"], dtype="float64")
-        self["seg_sigma_raw"] = np.array(self["seg_sigma_raw"], dtype="float64")
+        self["seg_sigma_raw"] = self["seg_charge"] / self["seg_area"]
         self["seg_potential"] = (
             np.array(self["seg_potential"], dtype="float64") * kJdivmol_per_hartree * angstrom_per_bohr
         )
@@ -378,13 +378,27 @@ class SigmaProfileParser(UserDict):
                 self._read_single_float(
                     line,
                     "energy_tot",
-                    r"Total\s+energy\s+corrected.*=\s*([0-9+-.eE]+)",
+                    r"Total\s+energy\s+\+\s+OC.+?=\s*([0-9+-.eE]+)",
+                    kJdivmol_per_hartree,
+                )
+
+                self._read_single_float(
+                    line,
+                    "energy_tot_uncorrected",
+                    r"Total\s+energy\s+\[a\.u\.\].*?=\s*([0-9+-.eE]+)",
                     kJdivmol_per_hartree,
                 )
 
                 self._read_single_float(
                     line,
                     "energy_dielectric",
+                    r"Diel.\s+energy\s+\+\s+OC.*?=\s*([0-9+-.eE]+)",
+                    kJdivmol_per_hartree,
+                )
+
+                self._read_single_float(
+                    line,
+                    "energy_dielectric_uncorrected",
                     r"Dielectric\s+energy\s+\[a\.u\.\]\s*=\s*([0-9+-.eE]+)",
                     kJdivmol_per_hartree,
                 )

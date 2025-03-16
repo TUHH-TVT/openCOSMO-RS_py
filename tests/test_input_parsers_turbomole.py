@@ -4,9 +4,7 @@ from opencosmorspy.input_parsers import SigmaProfileParser
 
 
 bohr_per_angstrom = 0.52917721092
-
 hartree_per_kJdivmol = 2625.499639479
-elpotatmu_per_volt = 27.211386245988
 
 
 class TestTurbomole:

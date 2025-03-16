@@ -2,6 +2,7 @@ __pycache__/
 .vscode/
 .pytest_cache/
 .ipynb_checkpoints/
+.spyproject/
 build/
 dist/
 000_*/

@@ -8,78 +8,22 @@ import plotly.graph_objects as go
 import rdkit.Chem
 import rdkit.Chem.rdDetermineBonds
 
-import opencosmorspy.segtp_collection as stpc
-from opencosmorspy.parameterization import Parameterization
-from opencosmorspy.molecules import Molecule
+from opencosmorspy.input_parsers import SigmaProfileParser
 
 
-def _generate_extended_sigma_profile(filepath, qc_program, par=None):
-
-    mol = Molecule([filepath], qc_program)
-    # ORCA
-
-    if par is None:
-        if qc_program == "orca":
-            par = Parameterization("default_orca")
-        elif qc_program == "turbomole":
-            par = Parameterization("default_turbomole")
-
-    mol.convert_properties(par.r_av, par.mf_r_av_corr)
-
-    segtp_col = stpc.SegtpCollection(par)
-    segtp_col.cluster_cosmo_struct(
-        mol.cosmo_struct_lst[0], par.sigma_grid, par.sigma_orth_grid
-    )
-    df_esp = pd.DataFrame(segtp_col.get_segtps_as_array_dct())
-
-    df_esp["area"] = 0.0
-    segtp_idxs = list(mol.cosmo_struct_lst[0].segtp_area_dct.keys())
-    segtp_areas = list(mol.cosmo_struct_lst[0].segtp_area_dct.values())
-    df_esp.loc[segtp_idxs, "area"] = list(segtp_areas)
-
-    return df_esp
-
-
-def _generate_sigma_profile(filepath, qc_program, par=None):
-
-    if par is None:
-        if qc_program == "orca":
-            par = Parameterization("default_orca")
-        elif qc_program == "turbomole":
-            par = Parameterization("default_turbomole")
-
-    df_esp = _generate_extended_sigma_profile(filepath, qc_program, par)
-
-    df_sp = pd.pivot_table(df_esp, values="area", index="sigma")
-    df_sp.reset_index(inplace=True)
-
-    for sigma in par.sigma_grid:
-        if np.all(np.abs(sigma - df_sp["sigma"]) > 1e-12):
-            idx_new = df_sp.index[-1] + 1
-            df_sp.loc[idx_new, "sigma"] = sigma
-            df_sp.loc[idx_new, "area"] = 0.0
-
-    df_sp.sort_values("sigma", inplace=True)
-
-    return df_sp
 
 
 def plot_sigmaprofiles(
-    dir_plot,
     filepath_lst,
-    qc_program,
     plot_name=None,
     plot_label_dct=None,
     xlim=(-0.02, 0.02),
+    dir_plot=None,
+    single_plot=False
 ):
 
     if plot_name is None:
         plot_name = "sigma_profiles"
-
-    if type(qc_program) == str:
-        qc_program_lst = [qc_program for filepath in filepath_lst]
-    else:
-        qc_program_lst = [qc_program[filepath] for filepath in filepath_lst]
 
     plot_label_lst = []
     for filepath in filepath_lst:
@@ -90,32 +34,37 @@ def plot_sigmaprofiles(
 
     fig, ax = plt.subplots(figsize=(12, 6))
 
-    for filepath, qcp, label in zip(filepath_lst, qc_program_lst, plot_label_lst):
-        df_sp = _generate_sigma_profile(filepath, qcp)
-        ax.plot(df_sp["sigma"], df_sp["area"], label=label)
+    for filepath, label in zip(filepath_lst, plot_label_lst):
+        spp = SigmaProfileParser(filepath)
+        sigmas, areas = spp.cluster_and_create_sigma_profile()
+        ax.plot(sigmas, areas, label=label)
 
-    ax.set_xlim(*xlim)
+        ax.set_xlim(*xlim)
 
-    plt.show()
+        if single_plot:
+            if dir_plot:
+                fig.savefig(os.path.join(dir_plot,  f"{plot_name}_{label}.png"), dpi=300)
+            else:
+                plt.show()
+
+    if not single_plot:
+        if dir_plot:
+            fig.savefig(os.path.join(dir_plot,  f"{plot_name}_{label}.png"), dpi=300)
+        else:
+            plt.show()
 
 
 def plot_sigmaprofiles_plotly(
-    dir_plot,
     filepath_lst,
-    qc_program,
-    mode="static",
     plot_name=None,
     plot_label_dct=None,
     xlim=(-0.02, 0.02),
+    dir_plot=None,
+    mode="static"
 ):
 
     if plot_name is None:
         plot_name = "sigma_profiles"
-
-    if type(qc_program) == str:
-        qc_program_lst = [qc_program for filepath in filepath_lst]
-    else:
-        qc_program_lst = [qc_program[filepath] for filepath in filepath_lst]
 
     plot_label_lst = []
     for filepath in filepath_lst:
@@ -125,7 +74,6 @@ def plot_sigmaprofiles_plotly(
             plot_label_lst.append(os.path.basename(filepath))
 
     fontsize = 20
-    fontsize_tick = 20
 
     if mode == "dynamic":
         xaxis_title = "sigma"
@@ -137,8 +85,8 @@ def plot_sigmaprofiles_plotly(
     fig = go.Figure()
 
     y_max = 0
-    for idx, (filepath, qcp, label) in enumerate(
-        zip(filepath_lst, qc_program_lst, plot_label_lst)
+    for idx, (filepath, label) in enumerate(
+        zip(filepath_lst, plot_label_lst)
     ):
 
         if idx == 0:
@@ -157,15 +105,16 @@ def plot_sigmaprofiles_plotly(
         elif idx == 6:
             line = {"dash": "dot", "color": "#565656"}
 
-        df_sp = _generate_sigma_profile(filepath, qcp)
-        y_max = max(y_max, df_sp["area"].max())
+        spp = SigmaProfileParser(filepath)
+        sigmas, areas = spp.cluster_and_create_sigma_profile()
+        y_max = max(y_max, areas.max())
 
         basename = os.path.basename(filepath)
 
         fig.add_trace(
             go.Scatter(
-                x=df_sp["sigma"],
-                y=df_sp["area"],
+                x=sigmas,
+                y=areas,
                 mode="lines",
                 name=basename,
                 line=line,
@@ -186,7 +135,7 @@ def plot_sigmaprofiles_plotly(
     )
     fig.update_layout(
         {
-            "xaxis_range": [-0.02, 0.02],
+            "xaxis_range": xlim,
             "yaxis_range": [0, y_max * 1.2],
             "plot_bgcolor": "rgba(0, 0, 0, 0)",
             "paper_bgcolor": "White",

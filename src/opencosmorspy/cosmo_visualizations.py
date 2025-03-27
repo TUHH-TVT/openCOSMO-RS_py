@@ -5,22 +5,65 @@ import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-import rdkit.Chem
+from rdkit import Chem
 import rdkit.Chem.rdDetermineBonds
 
 from opencosmorspy.input_parsers import SigmaProfileParser
 
+def get_atom_color_map(atoms_available=None):
+    element_color_discrete_map = {
+        # Blended H-bonded atoms (50% white + atom color)
+        "H-C": "#E4E4E4",    # Light gray (between white and C gray)
+        "H-O": "#FF8A8A",    # Light red
+        "H-N": "#98A8FC",    # Light blue
+        "H-S": "#FFE88F",    # Light yellow
+        "H-F": "#C8F4A8",    # Pale green
+        "H-Cl": "#BFFFBF",   # Mint green
+        "H-Br": "#D59494",   # Dusty pink
+        "H-I": "#EAC0EA",    # Soft purple
+        "H-P": "#FFD1A0",    # Light orange
+        "H-B": "#FFDADA",    # Blush pink
+        "H-Si": "#F1DCA0",   # Light tan
+
+        # Standard atoms (CPK colors)
+        "H": "#FFFFFF",      # White
+        "C": "#909090",      # Gray
+        "N": "#3050F8",      # Blue
+        "O": "#FF0D0D",      # Red
+        "F": "#90E050",      # Green
+        "Cl": "#1FF01F",     # Bright green
+        "Br": "#A62929",     # Brownish red
+        "I": "#940094",      # Violet
+        "S": "#FFD123",      # Yellow
+        "P": "#FF8000",      # Orange
+        "B": "#FFB5B5",      # Pink
+        "Si": "#DAA520",     # Goldenrod/tan
+        "Na": "#0000FF",     # Blue
+        "K": "#8F40D4",      # Purple
+        "Mg": "#8AFF00",     # Lime
+        "Ca": "#3DFF00",     # Green
+        "Fe": "#E06633",     # Rusty orange
+        "Zn": "#7D80B0",     # Light steel blue
+    }
+    missing_labels = [AN for AN in atoms_available if AN not in element_color_discrete_map]
+    safe_palette = px.colors.qualitative.Safe
+    for i, label in enumerate(missing_labels):
+        color = safe_palette[i % len(safe_palette)]
+        element_color_discrete_map[label] = color
+
+    return element_color_discrete_map
 
 
-
-def plot_sigmaprofiles(
+def plot_sigma_profiles(
     filepath_lst,
     plot_name=None,
     plot_label_dct=None,
     xlim=(-0.02, 0.02),
     dir_plot=None,
-    single_plot=False
+    aggregate_plots=False
 ):
+    if not dir_plot:
+        dir_plot = os.getcwd()
 
     if plot_name is None:
         plot_name = "sigma_profiles"
@@ -41,20 +84,20 @@ def plot_sigmaprofiles(
 
         ax.set_xlim(*xlim)
 
-        if single_plot:
+        if aggregate_plots:
             if dir_plot:
                 fig.savefig(os.path.join(dir_plot,  f"{plot_name}_{label}.png"), dpi=300)
             else:
                 plt.show()
 
-    if not single_plot:
+    if not aggregate_plots:
         if dir_plot:
             fig.savefig(os.path.join(dir_plot,  f"{plot_name}_{label}.png"), dpi=300)
         else:
             plt.show()
 
 
-def plot_sigmaprofiles_plotly(
+def plot_sigma_profiles_plotly(
     filepath_lst,
     plot_name=None,
     plot_label_dct=None,
@@ -62,6 +105,8 @@ def plot_sigmaprofiles_plotly(
     dir_plot=None,
     mode="static"
 ):
+    if not dir_plot:
+        dir_plot = os.getcwd()
 
     if plot_name is None:
         plot_name = "sigma_profiles"
@@ -194,26 +239,60 @@ def plot_sigmaprofiles_plotly(
         fig.write_html(os.path.join(dir_plot, plot_name + ".html"))
 
 
-def plot_extended_sigmaprofiles_plotly(dir_plot, filepath, qc_program, mode="dynamic"):
-
+def plot_extended_sigma_profile_plotly(filepath, area_max_size=30, dir_plot=None, mode="dynamic"):
+    if not dir_plot:
+        dir_plot = os.getcwd()
     plot_name = "extsp_" + os.path.splitext(os.path.basename(filepath))[0]
+    
+    spp = SigmaProfileParser(filepath)
+    spp.calculate_averaged_sigmas(averaging_radius=1)
+    sigmas_corr = spp['seg_sigma_averaged'].copy()
+    spp.calculate_averaged_sigmas()
+    sigmas = spp['seg_sigma_averaged']
+    
+    sigma_orth = sigmas_corr - 0.816 * sigmas
+    pt = Chem.GetPeriodicTable()
+    atom_AN = [pt.GetAtomicNumber(v) for v in spp['atm_elmnt']]
+    for i, AN in enumerate(atom_AN):
+        if AN == 1:
+            adjacent_index = np.flatnonzero(spp['adjacency_matrix'][i, :])[0]
+            atom_AN[i] = 100 + atom_AN[adjacent_index]
+    atom_AN = np.array(atom_AN)
+    seg_AN = np.array([atom_AN[n] for n in spp['seg_atm_nr']])
 
-    df_esp = _generate_extended_sigma_profile(filepath, qc_program)
+    descriptors = [sigmas, sigma_orth, seg_AN]
+    descriptor_ranges = [np.arange(-0.03, 0.03, 0.001), np.arange(-0.03, 0.03, 0.001), np.sort(np.unique(atom_AN))]
+    clustered_descriptors, clustered_areas = spp.cluster_segments_into_segmenttypes(
+        descriptors, descriptor_ranges
+    )
+    data = {
+        'sigma': clustered_descriptors[:, 0].tolist(),
+        'sigma_orth': clustered_descriptors[:, 1].tolist(),
+        'seg_AN': clustered_descriptors[:, 2].tolist(),
+        'area': clustered_areas.tolist(),
+    }
+    df_esp = pd.DataFrame(data)
 
-    df_esp["color"] = df_esp["elmnt_nr"]
-    df_esp.loc[df_esp["color"] == 106, "color"] = "H-C"
-    df_esp.loc[df_esp["color"] == 108, "color"] = "H-O"
-    df_esp.loc[df_esp["color"] == 107, "color"] = "H-N"
-    df_esp.loc[df_esp["color"] == 6, "color"] = "C"
-    df_esp.loc[df_esp["color"] == 8, "color"] = "O"
-    df_esp.loc[df_esp["color"] == 7, "color"] = "N"
-    df_esp.loc[df_esp["color"] == 17, "color"] = "Cl"
+    ANs = []
+    AN_labels = []
+    for AN in sorted(set(atom_AN)):
+        if AN > 100:
+            ANs.append(AN)
+            AN_labels.append(f'H-{pt.GetElementSymbol(int(AN - 100))}')
+    for AN in sorted(set(atom_AN)):
+        if AN < 100:
+            ANs.append(AN)
+            AN_labels.append(pt.GetElementSymbol(int(AN)))
+
+    df_esp["seg_AN_label"] = ''
+    for AN, AN_label in zip(ANs, AN_labels):
+        df_esp.loc[df_esp["seg_AN"] == AN, "seg_AN_label"] = AN_label
 
     # Make small areas visible, as they are clusters
     df_esp.loc[(df_esp["area"] != 0) & (df_esp["area"] < 0.06), "area"] = 0.06
 
     # Pivot
-    df_temp = pd.pivot_table(df_esp, values="sigma_orth", index="sigma", aggfunc=np.sum)
+    df_temp = pd.pivot_table(df_esp, values="sigma_orth", index="sigma", aggfunc='sum')
     df_temp.reset_index(inplace=True)
 
     fontsize = 24
@@ -227,27 +306,20 @@ def plot_extended_sigmaprofiles_plotly(dir_plot, filepath, qc_program, mode="dyn
         }
     elif mode == "dynamic":
         labels = {}
-
+    
+    atom_color_map = get_atom_color_map(AN_labels)
     fig = px.scatter(
         df_esp,
         x="sigma",
         y="sigma_orth",
-        color="color",
+        color="seg_AN_label",
         labels=labels,
         size="area",
-        hover_data=["sigma", "sigma_orth", "elmnt_nr"],
-        size_max=40,
+        hover_data=["sigma", "sigma_orth", "seg_AN"],
+        size_max=area_max_size,
         opacity=0.7,
-        color_discrete_map={
-            "H-C": "#316395",
-            "H-O": "#AF0000",
-            "H-N": "#7600b5",
-            "C": "#109618",
-            "O": "#565656",
-            "N": "#DEBC00",
-            "Cl": "#09118C",
-        },
-        category_orders={"color": ["H-O", "H-N", "H-C", "Cl", "C", "N", "O", "Cl"]},
+        color_discrete_map=atom_color_map,
+        category_orders={"seg_AN_label": AN_labels},
         width=800,
         height=500,
     )
@@ -307,60 +379,37 @@ def plot_extended_sigmaprofiles_plotly(dir_plot, filepath, qc_program, mode="dyn
         fig.write_html(os.path.join(dir_plot, plot_name + ".html"))
 
 
-def plot_cosmo_surface(parser, mode="dynamic", dir_plot=".", plot_name="cosmo_surface"):
-    """Plot a COSMO surface with atoms and bonds.
+def plot_3D_segment_location(filepath, mode="dynamic", dir_plot=".", plot_name="cosmo_surface"):
 
-    Example usage:
-    parser = SigmaProfileParser('path/to/simulation.orcacosmo', qc_program='orca')
-    plot_cosmo_surface_with_atoms_and_bonds(parser)"""
-
-    mol = rdkit.Chem.MolFromXYZBlock(parser.save_to_xyz())
-    rdkit.Chem.rdDetermineBonds.DetermineBonds(mol, charge=0)
+    spp = SigmaProfileParser(filepath)
+    mol = rdkit.Chem.MolFromXYZBlock(spp.save_to_xyz())
+    charge = int(spp['seg_charge'].sum())
+    rdkit.Chem.rdDetermineBonds.DetermineBonds(mol, charge=charge)
     if mol is None:
         raise ValueError("Unable to load molecule from XYZ file.")
 
     fig = go.Figure(
         data=[
             go.Scatter3d(
-                x=parser["seg_pos"][:, 0],
-                y=parser["seg_pos"][:, 1],
-                z=parser["seg_pos"][:, 2],
+                x=spp["seg_pos"][:, 0],
+                y=spp["seg_pos"][:, 1],
+                z=spp["seg_pos"][:, 2],
                 mode="markers",
                 marker=dict(
-                    size=parser["seg_area"]
+                    size=spp["seg_area"]
                     * 50,  # Scale the size for better visualization
-                    color=parser["seg_charge"],  # Set the color based on charge
+                    color=spp["seg_charge"],  # Set the color based on charge
                     colorscale="bluered",  # Color scale for charges
                     colorbar=dict(title="Charge"),
-                    opacity=0.8,
+                    opacity=0.7,
                 ),
                 name=None,
                 showlegend=False,
             )
         ]
     )
-
-    element_colors = {
-        "H": "green",  # Hydrogen
-        "C": "black",  # Carbon
-        "N": "blue",  # Nitrogen
-        "O": "red",  # Oxygen
-        "S": "yellow",  # Sulfur
-        "P": "orange",  # Phosphorus
-        "F": "light green",  # Fluorine
-        "Cl": "green",  # Chlorine
-        "Br": "brown",  # Bromine
-        "I": "purple",  # Iodine
-        "He": "cyan",  # Helium
-        "Ne": "cyan",  # Neon
-        "Ar": "cyan",  # Argon
-        "Li": "dark red",  # Lithium
-        "Na": "blue",  # Sodium
-        "K": "purple",  # Potassium
-        "Ca": "dark green",  # Calcium
-        "Fe": "orange",  # Iron
-        "Mg": "gray",  # Magnesium
-    }
+    atoms_available = sorted(set(spp['atm_elmnt']))
+    atom_color_map = get_atom_color_map(atoms_available)
 
     # Add bonds as lines (RDKit automatically infers bonds from 3D structure)
     for bond in mol.GetBonds():
@@ -370,25 +419,25 @@ def plot_cosmo_surface(parser, mode="dynamic", dir_plot=".", plot_name="cosmo_su
         # Add bond (line) between the two atoms
         fig.add_trace(
             go.Scatter3d(
-                x=[parser["atm_pos"][i, 0], parser["atm_pos"][j, 0]],
-                y=[parser["atm_pos"][i, 1], parser["atm_pos"][j, 1]],
-                z=[parser["atm_pos"][i, 2], parser["atm_pos"][j, 2]],
+                x=[spp["atm_pos"][i, 0], spp["atm_pos"][j, 0]],
+                y=[spp["atm_pos"][i, 1], spp["atm_pos"][j, 1]],
+                z=[spp["atm_pos"][i, 2], spp["atm_pos"][j, 2]],
                 mode="lines",
-                line=dict(color="black", width=10),
+                line=dict(color="black", width=8),
                 showlegend=False,
             )
         )
 
     # Add spheres for each atom (after bonds to ensure Z-order)
-    for i, element in enumerate(parser["atm_elmnt"]):
+    for i, element in enumerate(spp["atm_elmnt"]):
         # Get atomic position and radius
-        x_atm = parser["atm_pos"][i, 0]
-        y_atm = parser["atm_pos"][i, 1]
-        z_atm = parser["atm_pos"][i, 2]
-        radius = parser["atm_rad"][i]
+        x_atm = spp["atm_pos"][i, 0]
+        y_atm = spp["atm_pos"][i, 1]
+        z_atm = spp["atm_pos"][i, 2]
+        radius = spp["atm_rad"][i]
 
         # Get the color for the current element
-        color = element_colors.get(
+        color = atom_color_map.get(
             element, "orange"
         )  # Default to green if element not found
 
@@ -429,7 +478,3 @@ def plot_cosmo_surface(parser, mode="dynamic", dir_plot=".", plot_name="cosmo_su
         fig.write_image(os.path.join(dir_plot, plot_name + ".svg"))
     if mode == "dynamic":
         fig.write_html(os.path.join(dir_plot, plot_name + ".html"))
-
-
-if __name__ == "__main__":
-    pass

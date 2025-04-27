@@ -126,7 +126,7 @@ def cluster_segment(segment, sigma_grid, sigma_orth_grid, descriptor_lst):
         )
 
     # Delete unused descriptors
-    unused_descriptors = list(set(handled_descriptors) - set(descriptor_lst))
+    unused_descriptors = list(set(descriptor_lst) - set(handled_descriptors))
     for descriptor in unused_descriptors:
         for segtp in segtp_lst:
             del segtp[descriptor]

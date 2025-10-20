@@ -378,13 +378,27 @@ class SigmaProfileParser(UserDict):
                 self._read_single_float(
                     line,
                     "energy_tot",
-                    r"Total\s+energy\s+corrected.*=\s*([0-9+-.eE]+)",
+                    r"Total\s+energy\s+\+\s+OC.+?=\s*([0-9+-.eE]+)",
+                    kJdivmol_per_hartree,
+                )
+
+                self._read_single_float(
+                    line,
+                    "energy_tot_uncorrected",
+                    r"Total\s+energy\s+\[a\.u\.\].*?=\s*([0-9+-.eE]+)",
                     kJdivmol_per_hartree,
                 )
 
                 self._read_single_float(
                     line,
                     "energy_dielectric",
+                    r"Diel.\s+energy\s+\+\s+OC.*?=\s*([0-9+-.eE]+)",
+                    kJdivmol_per_hartree,
+                )
+
+                self._read_single_float(
+                    line,
+                    "energy_dielectric_uncorrected",
                     r"Dielectric\s+energy\s+\[a\.u\.\]\s*=\s*([0-9+-.eE]+)",
                     kJdivmol_per_hartree,
                 )

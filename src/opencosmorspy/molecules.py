@@ -30,7 +30,7 @@ class Molecule(object):
 
         self.cosmo_struct_lst = []
         for path in filepath_lst:
-            cosmo_info = SigmaProfileParser(path, qc_program)
+            cosmo_info = SigmaProfileParser(path)
             self.cosmo_struct_lst.append(COSMOStruct(cosmo_info))
             self.cosmo_struct_lst[-1]
 

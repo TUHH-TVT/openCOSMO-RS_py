@@ -568,6 +568,8 @@ class COSMORSEnthalpic(object):
 
         self.int_arr_store_dct = {}
 
+        self.molecules_cache = {}
+
     def add_molecule(self, filepath_lst):
         """
         Add a molecule to the object
@@ -583,7 +585,10 @@ class COSMORSEnthalpic(object):
 
         """
 
-        self.mol_lst.append(Molecule(filepath_lst, self.par.qc_program))
+        if tuple(filepath_lst) not in self.molecules_cache:
+            self.molecules_cache[tuple(filepath_lst)] = Molecule(filepath_lst)
+
+        self.mol_lst.append(self.molecules_cache[tuple(filepath_lst)])
         mol = self.mol_lst[-1]
         mol.convert_properties(self.par.r_av, self.par.mf_r_av_corr)
 

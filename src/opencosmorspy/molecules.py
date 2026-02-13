@@ -23,7 +23,7 @@ from opencosmorspy.segtp_collection import SegtpCollection
 
 
 class Molecule(object):
-    def __init__(self, filepath_lst, qc_program):
+    def __init__(self, filepath_lst):
 
         if len(filepath_lst) > 1:
             raise NotImplementedError("More than one conformer not supported")

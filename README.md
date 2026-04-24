@@ -3,9 +3,11 @@
 ## About 
 
 This package is a fully python based implementation of the model COSMO-RS, supporting multiple segment descriptors.
-Details about this implementation can be found in our publication:
-
-https://www.sciencedirect.com/science/article/abs/pii/S0378381222000954
+Papers related to openCOSMO-RS:
+- original paper [here](https://www.sciencedirect.com/science/article/pii/S0378381222000954).
+- version 24a paper[here](https://www.sciencedirect.com/science/article/pii/S0378381224002255).
+- halocarbon paper [here](https://www.sciencedirect.com/science/article/pii/S0009250925002489).
+- version 25a [here](https://www.sciencedirect.com/science/article/pii/S0009250925009935).
 
 
 ## Application 

@@ -3,6 +3,7 @@
 
 import os
 import re
+import json
 from collections import UserDict
 
 import numpy as np
@@ -13,14 +14,33 @@ kJdivmol_per_hartree = 2625.499639479  # (kJ/mol)/hartree
 
 
 class SigmaProfileParser(UserDict):
-    def __init__(self, filepath, qc_program=None, *, calculate_averaged_sigmas=False):
+    def __init__(self, filepath, *, calculate_averaged_sigmas=False):
 
-        if qc_program is None:
-            ext = os.path.splitext(filepath)[-1]
-            if ext.lower().startswith(".cosmo"):
-                qc_program = "turbomole"
+        json_data = None
+        ext = os.path.splitext(filepath)[-1]
+        if ext.lower().startswith(".cosmo"):
+            qc_program = "turbomole"
+        elif ext.lower().startswith(".json"):
+            with open(filepath, "r") as json_file:
+                json_data = json.load(json_file)
+
+            if set(json_data) == set(
+                [
+                    "general",
+                    "structural",
+                    "electronic",
+                    "vibrational",
+                    "NMR",
+                    "solvation",
+                ]
+            ):
+                qc_program = "gaussian_CHAOS"
             else:
-                qc_program = "orca"
+                raise ValueError(
+                    "This json file format is not supported. Either you provided the wrong file or you could contribute to this project by coding the parser for this format."
+                )
+        else:
+            qc_program = "orca"
 
         self.data = {
             "filepath": filepath,
@@ -53,6 +73,8 @@ class SigmaProfileParser(UserDict):
 
         if qc_program == "turbomole":
             self._read_turbomolesp()
+        elif qc_program == "gaussian_CHAOS":
+            self._read_gaussian_CHAOS(json_data)
         elif qc_program == "orca":
             self._read_orcasp()
         else:
@@ -82,29 +104,39 @@ class SigmaProfileParser(UserDict):
             xyzf.write(self.save_to_xyz(comment))
 
     def cluster_segments_into_segmenttypes(self, descriptors, descriptor_ranges):
-        areas = self['seg_area']
+        areas = self["seg_area"]
         if len(descriptors) != len(descriptor_ranges):
-            raise ValueError('descriptors and descriptor_ranges have to have same length.')
-        
+            raise ValueError(
+                "descriptors and descriptor_ranges have to have same length."
+            )
+
         # descriptor_ranges are assumed to be float, equidistant and sorted or integer and sorted
-        descriptor_types = [descriptor_range.dtype for descriptor_range in descriptor_ranges]
+        descriptor_types = [
+            descriptor_range.dtype for descriptor_range in descriptor_ranges
+        ]
         if not all([dt == float or dt == int for dt in descriptor_types]):
-            raise TypeError('Only int or float descriptors are supported right now.')
+            raise TypeError("Only int or float descriptors are supported right now.")
 
         descriptors = np.transpose(np.array(descriptors))
         n_descriptors = descriptors.shape[1]
 
-        def cluster_segments_to_segment_types_for_one_descriptor(segments_descriptors, segments_area, i_descriptor_to_cluster):
+        def cluster_segments_to_segment_types_for_one_descriptor(
+            segments_descriptors, segments_area, i_descriptor_to_cluster
+        ):
             segment_types_descriptors = []
             segment_type_areas = []
             i_descriptor_range = descriptor_ranges[i_descriptor_to_cluster]
-            for segment_descriptors, segment_area in zip(segments_descriptors, segments_area):
+            for segment_descriptors, segment_area in zip(
+                segments_descriptors, segments_area
+            ):
                 descriptor_value = segment_descriptors[i_descriptor_to_cluster]
 
                 ind_left = np.flatnonzero(i_descriptor_range <= descriptor_value)[-1]
                 left_clustered_descriptor_value = i_descriptor_range[ind_left]
                 left_new_segment_type_descriptors = segment_descriptors.copy()
-                left_new_segment_type_descriptors[i_descriptor_to_cluster] = left_clustered_descriptor_value
+                left_new_segment_type_descriptors[i_descriptor_to_cluster] = (
+                    left_clustered_descriptor_value
+                )
                 segment_types_descriptors.append(left_new_segment_type_descriptors)
 
                 if left_clustered_descriptor_value == descriptor_value:
@@ -112,11 +144,28 @@ class SigmaProfileParser(UserDict):
                 else:
                     right_new_segment_type_descriptors = segment_descriptors.copy()
                     right_clustered_descriptor_value = i_descriptor_range[ind_left + 1]
-                    clustered_delta = right_clustered_descriptor_value - left_clustered_descriptor_value
-                    right_new_segment_type_descriptors[i_descriptor_to_cluster] = right_clustered_descriptor_value
+                    clustered_delta = (
+                        right_clustered_descriptor_value
+                        - left_clustered_descriptor_value
+                    )
+                    right_new_segment_type_descriptors[i_descriptor_to_cluster] = (
+                        right_clustered_descriptor_value
+                    )
                     segment_types_descriptors.append(right_new_segment_type_descriptors)
-                    segment_type_areas.append(segment_area * ((right_clustered_descriptor_value - descriptor_value)/clustered_delta))
-                    segment_type_areas.append(segment_area * ((descriptor_value - left_clustered_descriptor_value)/clustered_delta))
+                    segment_type_areas.append(
+                        segment_area
+                        * (
+                            (right_clustered_descriptor_value - descriptor_value)
+                            / clustered_delta
+                        )
+                    )
+                    segment_type_areas.append(
+                        segment_area
+                        * (
+                            (descriptor_value - left_clustered_descriptor_value)
+                            / clustered_delta
+                        )
+                    )
 
             return segment_types_descriptors, segment_type_areas
 
@@ -125,12 +174,20 @@ class SigmaProfileParser(UserDict):
 
         for i_segment_descriptors, i_segment_area in zip(descriptors, areas):
 
-            segments_types, segments_types_areas = [i_segment_descriptors.tolist()], [i_segment_area]
+            segments_types, segments_types_areas = [i_segment_descriptors.tolist()], [
+                i_segment_area
+            ]
 
             for i_descriptor in range(n_descriptors):
-                segments_types, segments_types_areas = cluster_segments_to_segment_types_for_one_descriptor(segments_types, segments_types_areas, i_descriptor)
+                segments_types, segments_types_areas = (
+                    cluster_segments_to_segment_types_for_one_descriptor(
+                        segments_types, segments_types_areas, i_descriptor
+                    )
+                )
 
-            for segment_type, segment_type_area in zip(segments_types, segments_types_areas):
+            for segment_type, segment_type_area in zip(
+                segments_types, segments_types_areas, strict=True
+            ):
                 if segment_type not in all_segment_types:
                     all_segment_types.append(segment_type)
                     all_segment_type_areas.append(0)
@@ -148,7 +205,7 @@ class SigmaProfileParser(UserDict):
 
         all_segment_types = all_segment_types[sorted_indices]
         all_segment_type_areas = all_segment_type_areas[sorted_indices]
-        
+
         return all_segment_types, all_segment_type_areas
 
     def cluster_and_create_sigma_profile(
@@ -166,7 +223,7 @@ class SigmaProfileParser(UserDict):
             descriptors, descriptor_ranges
         )
         clustered_sigmas = clustered_sigmas.reshape(-1)
-        
+
         for sigma in sigmas_range:
             area = 0.0
             if sigma in clustered_sigmas:
@@ -239,9 +296,9 @@ class SigmaProfileParser(UserDict):
 
         # first step adjusting to manual
         # only calculate:
-            # Second Moment
-            # Third Moment
-            # Fourth Moment
+        # Second Moment
+        # Third Moment
+        # Fourth Moment
         for i in [2, 3, 4]:
             current_HB_threshold = 0.006 + i * 0.002
 
@@ -311,10 +368,8 @@ class SigmaProfileParser(UserDict):
             atm_pos_multiplier = 1
 
         self["atm_nr"] = np.array(self["atm_nr"], dtype="int64")
-        self["atm_pos"] = (
-            np.array(self["atm_pos"], dtype="float64") * atm_pos_multiplier
-        )
-        self["atm_rad"] = np.array(self["atm_rad"], dtype="float64")
+        self["atm_pos"] = np.array(self["atm_pos"]) * atm_pos_multiplier
+        self["atm_rad"] = np.array(self["atm_rad"])
 
     def _read_turbomole_seg_section(self, cosmofile):
 
@@ -345,13 +400,11 @@ class SigmaProfileParser(UserDict):
 
         self["seg_nr"] = np.array(self["seg_nr"], dtype="int64")
         self["seg_atm_nr"] = np.array(self["seg_atm_nr"], dtype="int64")
-        self["seg_pos"] = np.array(self["seg_pos"], dtype="float64") * angstrom_per_bohr
-        self["seg_charge"] = np.array(self["seg_charge"], dtype="float64")
-        self["seg_area"] = np.array(self["seg_area"], dtype="float64")
-        self["seg_sigma_raw"] = np.array(self["seg_sigma_raw"], dtype="float64")
-        self["seg_potential"] = (
-            np.array(self["seg_potential"], dtype="float64") * kJdivmol_per_hartree * angstrom_per_bohr
-        )
+        self["seg_pos"] = np.array(self["seg_pos"]) * angstrom_per_bohr
+        self["seg_charge"] = np.array(self["seg_charge"])
+        self["seg_area"] = np.array(self["seg_area"])
+        self["seg_sigma_raw"] = np.array(self["seg_sigma_raw"])
+        self["seg_potential"] = np.array(self["seg_potential"]) * kJdivmol_per_hartree
 
     def _read_turbomolesp(self):
 
@@ -364,7 +417,7 @@ class SigmaProfileParser(UserDict):
                 if line == "$info":
                     line = next(cosmofile).strip()
                     self["method"] = (
-                        f'{line.split(";")[-2]}_{line.split(";")[-1]}'.lower()
+                        f"{line.split(';')[-2]}_{line.split(';')[-1]}".lower()
                     )
 
                 self._read_single_float(
@@ -378,14 +431,14 @@ class SigmaProfileParser(UserDict):
                 self._read_single_float(
                     line,
                     "energy_tot",
-                    r"Total\s+energy\s+corrected.*=\s*([0-9+-.eE]+)",
+                    r"Total\s+energy\s+\+\s+OC.+?=\s*([0-9+-.eE]+)",
                     kJdivmol_per_hartree,
                 )
 
                 self._read_single_float(
                     line,
                     "energy_dielectric",
-                    r"Dielectric\s+energy\s+\[a\.u\.\]\s*=\s*([0-9+-.eE]+)",
+                    r"Diel.\s+energy\s+\+\s+OC.*?=\s*([0-9+-.eE]+)",
                     kJdivmol_per_hartree,
                 )
 
@@ -418,7 +471,7 @@ class SigmaProfileParser(UserDict):
             self["atm_elmnt"].append(line_splt[0].title())
 
         self["atm_nr"] = np.array(self["atm_nr"], dtype="int64")
-        self["atm_pos"] = np.array(self["atm_pos"], dtype="float64")
+        self["atm_pos"] = np.array(self["atm_pos"])
 
     def _read_orca_atom_radii(self, orcasp_file):
 
@@ -432,7 +485,7 @@ class SigmaProfileParser(UserDict):
 
             self["atm_rad"].append(line_splt[3])
 
-        self["atm_rad"] = np.array(self["atm_rad"], dtype="float64") * angstrom_per_bohr
+        self["atm_rad"] = np.array(self["atm_rad"], dtype=float) * angstrom_per_bohr
 
     def _read_orca_seg_section(self, orcasp_file):
 
@@ -459,19 +512,14 @@ class SigmaProfileParser(UserDict):
 
         self["seg_nr"] = np.array(self["seg_nr"], dtype="int64")
         self["seg_atm_nr"] = np.array(self["seg_atm_nr"], dtype="int64")
-        self["seg_pos"] = np.array(self["seg_pos"], dtype="float64") * angstrom_per_bohr
-        self["seg_charge_uncorrected"] = np.array(
-            self["seg_charge_uncorrected"], dtype="float64"
-        )
-        self["seg_area"] = (
-            np.array(self["seg_area"], dtype="float64") * angstrom_per_bohr**2
-        )
+        self["seg_pos"] = np.array(self["seg_pos"]) * angstrom_per_bohr
+        self["seg_charge_uncorrected"] = np.array(self["seg_charge_uncorrected"])
+        self["seg_area"] = np.array(self["seg_area"]) * angstrom_per_bohr**2
         self["seg_sigma_raw_uncorrected"] = (
             self["seg_charge_uncorrected"] / self["seg_area"]
         )
         self["seg_potential_uncorrected"] = (
-            np.array(self["seg_potential_uncorrected"], dtype="float64")
-            * kJdivmol_per_hartree
+            np.array(self["seg_potential_uncorrected"]) * kJdivmol_per_hartree
         )
 
     def _read_orca_cpcm_correction_section(self, orcasp_file):
@@ -506,7 +554,7 @@ class SigmaProfileParser(UserDict):
             corrected_charges.append(corrected_charge)
 
         assert self["seg_charge_uncorrected"].size == len(corrected_charges)
-        self["seg_charge"] = np.array(corrected_charges, dtype="float64")
+        self["seg_charge"] = np.array(corrected_charges)
         self["seg_sigma_raw"] = self["seg_charge"] / self["seg_area"]
 
     def _read_orca_adjacency_matrix(self, orcasp_file):
@@ -519,6 +567,33 @@ class SigmaProfileParser(UserDict):
             adjacency_marix.append(line)
 
         self["adjacency_matrix"] = np.array(adjacency_marix, dtype="int")
+
+    def _read_orca_polarizability_tensor(self, orcasp_file):
+
+        next(orcasp_file)
+        next(orcasp_file)
+
+        polarizability_tensor = []
+        for _ in range(self["atm_pos"].shape[0]):
+            line = next(orcasp_file)
+            if "---" in line:
+                break
+
+            line = line.split(":")[1].split("iso")[0]
+            entries = [(entry.strip()) for entry in line.split()]
+            assert len(entries) == 6
+
+            line_real = [float(entry) for entry in entries]
+            polarizability_tensor.append(line_real)
+
+        self["polarizability_tensor"] = np.array(polarizability_tensor)
+
+    def calculate_molecular_polarizability(self):
+        if "polarizability_tensor" not in self:
+            raise ValueError(
+                "The specified input file did not include polarizability information."
+            )
+        return float(self["polarizability_tensor"][:, :3].sum() / 3)
 
     def calculate_molecular_dipole(self):
         if "dipole_moment" not in self:
@@ -583,6 +658,84 @@ class SigmaProfileParser(UserDict):
                     self["dipole_moment"] = np.array(
                         [float(v) for v in line.strip().split()[-3:]]
                     )
+
+                if "#ATOMIC POLARIZABILITIES" in line:
+                    self._read_orca_polarizability_tensor(orcasp_file)
+
+    def _read_gaussian_CHAOS(self, json_data):
+
+        general = json_data["general"]
+        structural = json_data["structural"]
+        electronic = json_data["electronic"]
+        solvation = json_data["solvation"]
+
+        self["name"] = general["CanonicalSMILES"]
+        self["method"] = "ωB97X-D/def2-TZVP_gasPhaseOpt_CPCM_SP"
+
+        self["area"] = float(solvation["CavArea"]) * angstrom_per_bohr**2
+        self["volume"] = float(solvation["CavVolume"]) * angstrom_per_bohr**3
+
+        self["dipole_moment"] = np.array(electronic["DipoleVec"])
+
+        self["energy_tot"] = float(solvation["SCFCOSMOEnergy"]) * kJdivmol_per_hartree
+        self["energy_tot_uncorrected"] = self["energy_tot"]
+        self["energy_tot_gas"] = float(electronic["SCFEnergy"]) * kJdivmol_per_hartree
+
+        self["energy_dielectric_uncorrected"] = (
+            float(solvation["SCFCOSMOEnergy"]) - float(electronic["SCFEnergy"])
+        ) * kJdivmol_per_hartree
+        self["energy_dielectric"] = self["energy_dielectric_uncorrected"]
+
+        seg_list = solvation["SegmentList"]
+        self["seg_nr"] = np.array([int(s[0]) - 1 for s in seg_list], dtype="int64")
+        self["seg_atm_nr"] = np.array([int(s[1]) - 1 for s in seg_list], dtype="int64")
+
+        self["seg_pos"] = (
+            np.array([[float(s[2]), float(s[3]), float(s[4])] for s in seg_list])
+            * angstrom_per_bohr
+        )
+
+        self["seg_charge_uncorrected"] = np.array([float(s[5]) for s in seg_list])
+        self["seg_charge"] = self["seg_charge_uncorrected"].copy()
+        self["seg_area"] = np.array([float(s[6]) for s in seg_list])
+
+        self["seg_sigma_raw_uncorrected"] = self["seg_charge"] / self["seg_area"]
+        self["seg_sigma_raw"] = self["seg_sigma_raw_uncorrected"].copy()
+
+        self["seg_potential_uncorrected"] = (
+            np.array([float(s[8]) for s in seg_list]) * kJdivmol_per_hartree
+        )
+        self["seg_potential"] = self["seg_potential_uncorrected"].copy()
+
+        atom_list = general["AtomList"]
+        coords = structural["Coordinates"]
+
+        self["atm_nr"] = np.array(
+            [int(a["index"]) - 1 for a in atom_list], dtype="int64"
+        )
+        self["atm_elmnt"] = [str(a["element"]).title() for a in atom_list]
+        self["atm_pos"] = np.array(coords)
+
+        # Radii are not part of CHAOS JSON
+        self["atm_rad"] = []
+        atom_radii_for_every_segment = np.linalg.norm(
+            self["seg_pos"] - self["atm_pos"][self["seg_atm_nr"]], axis=1
+        )
+        for atom_idx in self["atm_nr"]:
+            radii_this_atom = atom_radii_for_every_segment[
+                self["seg_atm_nr"] == atom_idx
+            ]
+            radius = np.mean(radii_this_atom)
+            if np.std(radii_this_atom) > 0.1:
+                print(
+                    "Inconsistent radius set found.",
+                    np.std(radii_this_atom),
+                    self["filename"],
+                )
+
+            self["atm_rad"].append(np.round(radius, 2))
+
+        self["atm_rad"] = np.array(self["atm_rad"])
 
 
 class PyCrsError(Exception):

@@ -16,7 +16,7 @@ class TestOrca:
         filepath = (r'tests/COSMO_ORCA/C2H5NO_002_Acetamide'
                     r'/COSMO_TZVPD'
                     r'/C2H5NO_002_Acetamide_CnfS1_c000.orcacosmo')
-        self.sigma_profile_parser = SigmaProfileParser(filepath, 'orca')
+        self.sigma_profile_parser = SigmaProfileParser(filepath)
 
     def test_method(self):
         

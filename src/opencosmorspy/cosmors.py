@@ -351,7 +351,7 @@ class Mixture(object):
                 "with number of model components."
             )
 
-        if np.abs(1 - x.sum()) > 1e-16:
+        if np.abs(1 - x.sum()) > 1e-15:
             raise ValueError("Mole fraction sum unequal unity")
         if np.any(x < -1e-16):
             raise ValueError("Negative mole fraction encountered")

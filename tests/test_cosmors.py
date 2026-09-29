@@ -76,7 +76,7 @@ def test_cosmors_refstate_conversion(parameterization_orca):
                       r'/COSMO_TZVPD/C2H2Cl4_001_1112tetrachloroethane_CnfS1_c000.orcacosmo'])
     crs.add_molecule([r'./tests/COSMO_ORCA/CH4O_001_methanol/COSMO_TZVPD'
                       r'/CH4O_001_methanol_c000.orcacosmo'])
-    crs.add_molecule([r'./tests/COSMO_ORCA/H2O_001/COSMO_TZVPD/H2O_c000.orcacosmo'])
+    crs.add_molecule([r'./tests/COSMO_ORCA/H2O/COSMO_TZVPD/H2O_c000.orcacosmo'])
 
     x = np.array([0.2, 0.5, 0.3])
     T = 298.15
@@ -173,7 +173,7 @@ def test_pm_vs_aim(parameterization_orca):
                       r'/COSMO_TZVPD/C2H2Cl4_001_1112tetrachloroethane_CnfS1_c000.orcacosmo'])
     crs.add_molecule([r'./tests/COSMO_ORCA/CH4O_001_methanol/COSMO_TZVPD'
                       r'/CH4O_001_methanol_c000.orcacosmo'])
-    crs.add_molecule([r'./tests/COSMO_ORCA/H2O_001/COSMO_TZVPD/H2O_c000.orcacosmo'])
+    crs.add_molecule([r'./tests/COSMO_ORCA/H2O/COSMO_TZVPD/H2O_c000.orcacosmo'])
 
 
     x = np.array([0.2, 0.5, 0.3])
@@ -203,7 +203,7 @@ def test_pm_gibbs_helmholtz(parameterization_orca):
                       r'/COSMO_TZVPD/C2H2Cl4_001_1112tetrachloroethane_CnfS1_c000.orcacosmo'])
     crs.add_molecule([r'./tests/COSMO_ORCA/CH4O_001_methanol/COSMO_TZVPD'
                       r'/CH4O_001_methanol_c000.orcacosmo'])
-    crs.add_molecule([r'./tests/COSMO_ORCA/H2O_001/COSMO_TZVPD/H2O_c000.orcacosmo'])
+    crs.add_molecule([r'./tests/COSMO_ORCA/H2O/COSMO_TZVPD/H2O_c000.orcacosmo'])
 
 
     x = np.array([0.2, 0.5, 0.3])

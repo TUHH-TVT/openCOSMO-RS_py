@@ -37,12 +37,13 @@ class TestOrca:
     
     def test_energy_dielectric(self):
         
-        assert abs(self.sigma_profile_parser['energy_dielectric'] -
+        assert abs(self.sigma_profile_parser['energy_dielectric_uncorrected'] -
                     (-0.022773896)*hartree_per_kJdivmol) < 1e-12
         
     def test_atm_nr(self):
         
-        assert self.sigma_profile_parser['atm_nr'][-2] == 7 and len(info['atm_nr'])==9
+        assert (self.sigma_profile_parser['atm_nr'][-2] == 7 and
+                len(self.sigma_profile_parser['atm_nr']) == 9)
     
     
     def test_atm_pos(self):
@@ -92,8 +93,8 @@ class TestOrca:
             
     def test_seg_charge(self):
         
-        assert len(self.sigma_profile_parser['seg_charge']) == 590
-        assert self.sigma_profile_parser['seg_charge'][-5] == -0.000157636
+        assert len(self.sigma_profile_parser['seg_charge_uncorrected']) == 590
+        assert self.sigma_profile_parser['seg_charge_uncorrected'][-5] == -0.000157636
                     
     
     def test_seg_area(self):
@@ -104,8 +105,8 @@ class TestOrca:
     
     def test_seg_sigma_raw(self):
         
-        assert len(self.sigma_profile_parser['seg_sigma_raw']) == 590
-        assert self.sigma_profile_parser['seg_sigma_raw'][-5] == (
+        assert len(self.sigma_profile_parser['seg_sigma_raw_uncorrected']) == 590
+        assert self.sigma_profile_parser['seg_sigma_raw_uncorrected'][-5] == (
             -0.000157636/(0.086357755*bohr_per_angstrom**2))
     
     

@@ -79,7 +79,7 @@ the partners. Both are given in J/mol.
 
 ## License
 
-This project is licensed under the GNU General Public License v2.0
+This project is licensed under the GNU Lesser General Public License v3.0 (LGPL-3.0)
 
 ## Other COSMO-RS related projects
 

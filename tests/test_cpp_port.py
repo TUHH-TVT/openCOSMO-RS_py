@@ -31,7 +31,6 @@ FILES = [
     os.path.join(DIR, "water.orcacosmo"),
 ]
 X = np.array([0.2, 0.5, 0.3])
-N_AVOGADRO = 6.022140857e23  # used by the C++ implementation in its contact statistics
 
 REFERENCE = {'comb0': [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]],
  'comb1': [[-0.262550192, 0.001227582, -0.143122763], [-0.262550192, 0.001227582, -0.143122763]],

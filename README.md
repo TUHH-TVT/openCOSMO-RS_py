@@ -12,10 +12,20 @@ Papers related to openCOSMO-RS:
 
 ## Application 
 
-The package can be installed via pip with the following command:
+The package can be installed from PyPI (Python 3.11 or newer):
+```
+pip install opencosmorspy
+```
+The 3D visualizations in `opencosmorspy.cosmo_visualizations` need additional packages (plotly, RDKit, scikit-image):
+```
+pip install "opencosmorspy[visualization]"
+```
+The development version can be installed directly from GitHub:
 ```
 pip install git+https://github.com/TUHH-TVT/openCOSMO-RS_py
 ```
+
+**Faster C++ implementation:** the same model is available as a C++ implementation with Python bindings, which is much faster. It is published on PyPI as `opencosmors` (`pip install opencosmors`, `import openCOSMORS`), see [openCOSMO-RS_cpp](https://github.com/TUHH-TVT/openCOSMO-RS_cpp). New model features are usually added there first. Note the similar names: `opencosmorspy` is this pure Python package, `opencosmors` is the C++ one.
 
 A short introduction on its use can be found in the examples directory.
 

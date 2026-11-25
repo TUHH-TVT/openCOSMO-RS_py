@@ -18,6 +18,6 @@ setuptools.setup(
     package_dir={"": "src"},
     packages=setuptools.find_packages(where="src"),
     python_requires=">=3.11",
-    install_requires=["numpy", "scipy", "pandas", "matplotlib"],
-    extras_require={"visualization": ["plotly", "rdkit", "scikit-image"]},
+    install_requires=["numpy", "scipy", "pandas", "matplotlib", "plotly"],
+    extras_require={"visualization": ["rdkit", "scikit-image"]},
 )

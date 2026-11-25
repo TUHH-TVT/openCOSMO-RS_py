@@ -16,7 +16,7 @@ The package can be installed from PyPI (Python 3.11 or newer):
 ```
 pip install opencosmorspy
 ```
-The 3D visualizations in `opencosmorspy.cosmo_visualizations` need additional packages (plotly, RDKit, scikit-image):
+The 3D visualizations in `opencosmorspy.cosmo_visualizations` need additional packages (RDKit, scikit-image):
 ```
 pip install "opencosmorspy[visualization]"
 ```

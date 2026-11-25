@@ -2,7 +2,7 @@ name: Test and publish
 
 on:
   push:
-    branches: [master, ci-publish]
+    branches: [master]
     tags: ["v*"]
   pull_request:
   workflow_dispatch:

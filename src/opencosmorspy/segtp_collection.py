@@ -31,6 +31,11 @@ class SegtpCollection(object):
 
         seg_segtp_assignment_lst = []
 
+        descriptor_lst = self.par.descriptor_lst
+        use_sigma_corr = "sigma_corr" in descriptor_lst
+        use_polariz = "polariz" in descriptor_lst
+        use_elmnt_nr = "elmnt_nr" in descriptor_lst
+
         for idx_seg, (sigma, sigma_orth, elmnt_nr, group) in enumerate(
             zip(
                 cosmo_struct.seg_sigma,
@@ -50,18 +55,35 @@ class SegtpCollection(object):
             else:
                 hba_sw = False
 
-            segment = {
-                "sigma": sigma,
-                "sigma_orth": sigma_orth,
-                "elmnt_nr": elmnt_nr,
-                "hbd_sw": hbd_sw,
-                "hba_sw": hba_sw,
-                "group": group,
-                "mol_charge": round(-cosmo_struct.screen_charge),
-            }
+            segment = {"sigma": sigma}
+
+            if use_sigma_corr:
+                segment["sigma_corr"] = cosmo_struct.seg_sigma_corr[idx_seg]
+            else:
+                segment["sigma_orth"] = sigma_orth
+
+            # Without the element number as descriptor, the segments of all
+            # elements are identical (the hydrogen bonding switches are already
+            # determined above).
+            segment["elmnt_nr"] = elmnt_nr if use_elmnt_nr else 0
+            segment["hbd_sw"] = hbd_sw
+            segment["hba_sw"] = hba_sw
+            segment["group"] = group
+            segment["mol_charge"] = cosmo_struct.mol_charge
+
+            if use_polariz:
+                segment["polariz"] = cosmo_struct.seg_polariz[idx_seg]
+
+            unbinned = []
+            if use_sigma_corr and cosmo_struct.seg_corr_unbinned[idx_seg]:
+                unbinned.append("sigma_corr")
 
             segtp_lst_new, segtp_frac_lst = cluster_segment(
-                segment, sigma_grid, sigma_orth_grid, self.par.descriptor_lst
+                segment,
+                sigma_grid,
+                sigma_orth_grid,
+                descriptor_lst,
+                unbinned_descriptors=unbinned,
             )
 
             seg_segtp_assignment = {}
@@ -91,18 +113,33 @@ class SegtpCollection(object):
         return segtp_arr_dct
 
 
-def cluster_segment(segment, sigma_grid, sigma_orth_grid, descriptor_lst):
+def cluster_segment(
+    segment, sigma_grid, sigma_orth_grid, descriptor_lst, unbinned_descriptors=()
+):
     """
 
     segment = {
         'sigma': 0.003,
-        'sigma_orth': 0.004,
+        'sigma_orth': 0.004,   (or 'sigma_corr')
         'elmnt_nr': 0.002,
         'group': None,
-        'mol_charge': 0}
+        'mol_charge': 0,
+        'polariz': 0.0}   (optional)
+
+    unbinned_descriptors: float descriptors that are not distributed to the
+    neighboring grid points but are kept as they are (e.g. sigma_corr = 0 of
+    monoatomic ions).
     """
 
-    handled_descriptors = ["sigma", "sigma_orth", "elmnt_nr", "group", "mol_charge"]
+    handled_descriptors = [
+        "sigma",
+        "sigma_orth",
+        "sigma_corr",
+        "elmnt_nr",
+        "group",
+        "mol_charge",
+        "polariz",
+    ]
 
     unhandled_descriptors = list(set(descriptor_lst) - set(handled_descriptors))
 
@@ -111,6 +148,9 @@ def cluster_segment(segment, sigma_grid, sigma_orth_grid, descriptor_lst):
 
     if "sigma" not in descriptor_lst:
         raise ValueError("Sigma must be included as descriptor")
+
+    if "sigma_orth" in descriptor_lst and "sigma_corr" in descriptor_lst:
+        raise ValueError("Use either sigma_orth or sigma_corr as descriptor")
 
     segtp_frac_lst = [1.0]
     segtp_lst = [segment]
@@ -125,11 +165,12 @@ def cluster_segment(segment, sigma_grid, sigma_orth_grid, descriptor_lst):
             "sigma_orth", sigma_orth_grid, segtp_lst, segtp_frac_lst
         )
 
-    # Delete unused descriptors
-    unused_descriptors = list(set(descriptor_lst) - set(handled_descriptors))
-    for descriptor in unused_descriptors:
-        for segtp in segtp_lst:
-            del segtp[descriptor]
+    # sigma_corr is clustered on the grid of sigma_orth (same definition of the
+    # grid, but for sigma_corr itself as in the C++ implementation)
+    if "sigma_corr" in descriptor_lst and "sigma_corr" not in unbinned_descriptors:
+        segtp_lst, segtp_frac_lst = _cluster_float_var(
+            "sigma_corr", sigma_orth_grid, segtp_lst, segtp_frac_lst
+        )
 
     return segtp_lst, segtp_frac_lst
 

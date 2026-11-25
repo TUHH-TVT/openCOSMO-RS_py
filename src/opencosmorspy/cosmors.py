@@ -11,12 +11,16 @@ import re
 
 # import sys
 import time
+import warnings
 
 import numpy as np
 import scipy.constants as spcon
 
-from opencosmorspy.molecules import Molecule
-from opencosmorspy.parameterization import Parameterization
+from opencosmorspy.molecules import Molecule, _convert_element_symbols
+from opencosmorspy.parameterization import (
+    Parameterization,
+    get_ionization_potential_ev,
+)
 from opencosmorspy.segtp_collection import SegtpCollection
 
 import logging
@@ -53,6 +57,7 @@ class COSMORS(object):
         self.par = None
         if type(par) == str:
             self.par = Parameterization(par)
+            self.par.check_parameterization()
         elif isinstance(par, Parameterization):
             par.check_parameterization()
             self.par = par
@@ -73,11 +78,16 @@ class COSMORS(object):
         self._jobmix_idxs_lst = []
         self._x_lst = []
         self._T_lst = []
+        self._solvation_job_lst = []  # job calculates the solvation energy
+
+        # Parameters of the solvation energy per molecule
+        self.dgsolv_e_gas_lst = []  # gas phase energy in Hartree
+        self.dgsolv_n_ring_atoms_lst = []  # number of atoms in rings
 
         self.jobmix_idxs = None  # Job mixture index array [n_job]
         self.refmix_idxs = None  # Ref state mixture index array [n_job, n_mol]
 
-    def add_molecule(self, filepath_lst):
+    def add_molecule(self, filepath_lst, e_gas=None, n_ring_atoms=None):
         """
         Add a molecule to the model class
 
@@ -85,6 +95,12 @@ class COSMORS(object):
         ----------
         filepath_lst : list
             List of filepaths of all cosmo files of a molecule
+        e_gas : float, optional
+            Gas phase energy of the molecule in Hartree. Only needed to
+            calculate solvation free energies (refst "solvation_energy").
+        n_ring_atoms : int, optional
+            Number of atoms of the molecule that are part of a ring. Only
+            needed to calculate solvation free energies.
 
         Returns
         -------
@@ -95,6 +111,8 @@ class COSMORS(object):
         self.clear_jobs()
 
         self.enth.add_molecule(filepath_lst)
+        self.dgsolv_e_gas_lst.append(e_gas)
+        self.dgsolv_n_ring_atoms_lst.append(n_ring_atoms)
 
         A_arr = np.array([mol.get_area() for mol in self.enth.mol_lst])
         self.comb.set_area_array(A_arr)
@@ -114,6 +132,8 @@ class COSMORS(object):
 
         self.enth.clear_molecules()
         self.comb.clear_molecules()
+        self.dgsolv_e_gas_lst = []
+        self.dgsolv_n_ring_atoms_lst = []
 
         self.clear_jobs()
 
@@ -128,7 +148,16 @@ class COSMORS(object):
         T : float
             Temperature in Kelvin
         refst : string
-            reference_state type "cosmo", "pure_component", "reference_mixture"
+            reference_state type
+             - "cosmo"
+             - "pure_component"
+             - "pure_component_only_neutral" : pure component reference state
+               for neutral molecules, the results of charged molecules are NaN
+             - "reference_mixture"
+             - "solvation_energy" : COSMO reference state, additionally the
+               solvation free energy (kcal/mol) of all components with a mole
+               fraction of zero in the solvent (the component with a mole
+               fraction of one) is calculated (result "dGsolv")
         x_refst : np.array, optional
             Mole fraction array for reference state if
             refst=="reference_mixture"
@@ -139,20 +168,34 @@ class COSMORS(object):
 
         """
 
+        if refst not in (
+            "cosmo",
+            "pure_component",
+            "pure_component_only_neutral",
+            "reference_mixture",
+            "solvation_energy",
+        ):
+            raise ValueError(f"Unknown reference state {refst}")
+
         self._x_lst.append(x)
         self._T_lst.append(T)
+        self._solvation_job_lst.append(refst == "solvation_energy")
 
         n_mol = len(x)
 
-        if refst == "cosmo":
+        if refst in ("cosmo", "solvation_energy"):
             n_mol = len(self.enth.mol_lst)
             refst_idx = -1 * np.ones(n_mol, dtype="int_")
             self._refmix_idxs_lst.append(refst_idx)
 
-        elif refst == "pure_component":
+        elif refst in ("pure_component", "pure_component_only_neutral"):
 
             refst_idx = np.nan * np.ones(n_mol, dtype="int_")
             for idxm, mol in enumerate(self.enth.mol_lst):
+                if refst == "pure_component_only_neutral" and mol.get_charge() != 0:
+                    # no reference state, the results are NaN
+                    refst_idx[idxm] = -2
+                    continue
                 x_refst = np.zeros(n_mol)
                 x_refst[idxm] = 1.0
                 mix_ref, idx_mix_ref = self._get_mixture(x_refst, T)
@@ -209,53 +252,9 @@ class COSMORS(object):
         for mix in self.mix_lst:
             mix.calculate()
 
-        tot_res_odct = collections.OrderedDict({})
-        keys = self.mix_lst[0].tot_res.keys()
-        keys = [key for key in keys if re.match("(lng|aim_|pm_).*", key)]
-        for key in keys:
-            tot_res_odct[key] = []
-            for idx_job, idx_jobm in enumerate(self.jobmix_idxs):
-                assert idx_job == len(tot_res_odct[key])
-                tot_res_odct[key].append(self.mix_lst[idx_jobm].tot_res[key].copy())
-                for idx_mol in range(n_mol):
-                    idx_refm = self.refmix_idxs[idx_job, idx_mol]
-                    if idx_refm != -1:
-                        tot_res_odct[key][idx_job][idx_mol] -= self.mix_lst[
-                            idx_refm
-                        ].tot_res[key][idx_mol]
-            tot_res_odct[key] = np.array(tot_res_odct[key], dtype="float64")
-
-        enth_res_odct = collections.OrderedDict({})
-        keys = self.mix_lst[0].enth_res.keys()
-        keys = [key for key in keys if re.match("(lng|aim_|pm_).*", key)]
-        for key in keys:
-            enth_res_odct[key] = []
-            for idx_job, idx_jobm in enumerate(self.jobmix_idxs):
-                assert idx_job == len(enth_res_odct[key])
-                enth_res_odct[key].append(self.mix_lst[idx_jobm].enth_res[key].copy())
-                for idx_mol in range(n_mol):
-                    idx_refm = self.refmix_idxs[idx_job, idx_mol]
-                    if idx_refm != -1:
-                        enth_res_odct[key][idx_job][idx_mol] -= self.mix_lst[
-                            idx_refm
-                        ].enth_res[key][idx_mol]
-            enth_res_odct[key] = np.array(enth_res_odct[key], dtype="float64")
-
-        comb_res_odct = collections.OrderedDict({})
-        keys = self.mix_lst[0].comb_res.keys()
-        keys = [key for key in keys if re.match("(lng|aim_|pm_).*", key)]
-        for key in keys:
-            comb_res_odct[key] = []
-            for idx_job, idx_jobm in enumerate(self.jobmix_idxs):
-                assert idx_job == len(comb_res_odct[key])
-                comb_res_odct[key].append(self.mix_lst[idx_jobm].comb_res[key].copy())
-                for idx_mol in range(n_mol):
-                    idx_refm = self.refmix_idxs[idx_job, idx_mol]
-                    if idx_refm != -1:
-                        comb_res_odct[key][idx_job][idx_mol] -= self.mix_lst[
-                            idx_refm
-                        ].comb_res[key][idx_mol]
-            comb_res_odct[key] = np.array(comb_res_odct[key], dtype="float64")
+        tot_res_odct = self._convert_reference_states("tot_res", n_mol)
+        enth_res_odct = self._convert_reference_states("enth_res", n_mol)
+        comb_res_odct = self._convert_reference_states("comb_res", n_mol)
 
         res = collections.OrderedDict()
         res["x"] = x
@@ -264,7 +263,175 @@ class COSMORS(object):
         res["enth"] = enth_res_odct
         res["comb"] = comb_res_odct
 
+        if any(self._solvation_job_lst):
+            res["dGsolv"] = self._calculate_dgsolv(x, T, tot_res_odct["lng"])
+
         return res
+
+    def _convert_reference_states(self, attr_name, n_mol):
+        """
+        Convert the results of the mixtures to the wanted reference states
+
+        Parameters
+        ----------
+        attr_name : string
+            Name of the results of the mixtures: "tot_res", "enth_res" or
+            "comb_res".
+        n_mol : int
+            Number of molecules.
+
+        Returns
+        -------
+        res_odct : OrderedDict
+            Results of all jobs of the properties lng, aim_* and pm_*. If a
+            reference state does not exist (-2) the results are NaN.
+
+        """
+
+        res_odct = collections.OrderedDict({})
+        keys = getattr(self.mix_lst[0], attr_name).keys()
+        keys = [key for key in keys if re.match("(lng|aim_|pm_).*", key)]
+        for key in keys:
+            res_odct[key] = []
+            for idx_job, idx_jobm in enumerate(self.jobmix_idxs):
+                assert idx_job == len(res_odct[key])
+                res_odct[key].append(
+                    getattr(self.mix_lst[idx_jobm], attr_name)[key].copy()
+                )
+                for idx_mol in range(n_mol):
+                    idx_refm = self.refmix_idxs[idx_job, idx_mol]
+                    if idx_refm == -2:
+                        res_odct[key][idx_job][idx_mol] = np.nan
+                    elif idx_refm != -1:
+                        res_odct[key][idx_job][idx_mol] -= getattr(
+                            self.mix_lst[idx_refm], attr_name
+                        )[key][idx_mol]
+            res_odct[key] = np.array(res_odct[key], dtype="float64")
+
+        return res_odct
+
+    def _calculate_dgsolv(self, x, T, lng):
+        """
+        Calculate solvation free energies of the jobs with the reference state
+        "solvation_energy"
+
+        dGsolv = E_diel + mu_liquid - E_vdw - E_ring - RT ln(V_ig/V_solvent) - eta
+
+        Parameters
+        ----------
+        x : np.array(n_job, n_mol)
+            Mole fractions.
+        T : np.array(n_job)
+            Temperatures in Kelvin.
+        lng : np.array(n_job, n_mol)
+            Logarithmic activity coefficients (COSMO reference state).
+
+        Returns
+        -------
+        dgsolv : np.array(n_job, n_mol)
+            Solvation free energies in kcal/mol. Zero for the solvent, for
+            components with a mole fraction unequal zero and for jobs without
+            the reference state "solvation_energy".
+
+        """
+
+        par = self.par
+        kcal_per_hartree = 2625.499639479 / 4.184
+        reference_pressure = 101325.0  # Pa
+
+        n_job, n_mol = x.shape
+        dgsolv = np.zeros((n_job, n_mol))
+        missing_tau = set()
+
+        mol_lst = self.enth.mol_lst
+
+        for idx_job in range(n_job):
+            if not self._solvation_job_lst[idx_job]:
+                continue
+
+            idx_solvent = np.flatnonzero(x[idx_job] == 1.0)
+            if len(idx_solvent) == 0:
+                raise ValueError(
+                    f"Job {idx_job}: the reference state solvation_energy "
+                    f"requires one component with a mole fraction of 1 (the "
+                    f"solvent) and all other components with a mole fraction of 0."
+                )
+            idx_solvent = idx_solvent[0]
+
+            rt = spcon.R * T[idx_job]
+            molar_volume_ideal_gas = rt / reference_pressure
+            rt_kcal = rt / (1000 * 4.184)
+            molar_volume_solvent = (
+                mol_lst[idx_solvent].get_molar_volume_25c(par.dgsolv_strict) / 1e6
+            )
+            reference_state_correction = rt_kcal * np.log(
+                molar_volume_ideal_gas / molar_volume_solvent
+            )
+
+            for idx_mol in range(n_mol):
+                if x[idx_job, idx_mol] != 0.0:
+                    continue
+
+                mol = mol_lst[idx_mol]
+                e_gas = self.dgsolv_e_gas_lst[idx_mol]
+                n_ring_atoms = self.dgsolv_n_ring_atoms_lst[idx_mol]
+                if e_gas is None or n_ring_atoms is None:
+                    raise ValueError(
+                        "To calculate solvation energies the gas phase energy "
+                        "e_gas (Hartree) and the number of atoms in rings "
+                        "n_ring_atoms have to be given for every molecule in "
+                        "add_molecule."
+                    )
+                if mol.get_energy_tot() is None:
+                    raise ValueError(
+                        f"The COSMO file of molecule {idx_mol} does not "
+                        f"contain the total energy, which is needed to "
+                        f"calculate solvation energies."
+                    )
+
+                # areas of the elements (hydrogens bonded to other atoms are
+                # treated as hydrogen)
+                struct = mol.cosmo_struct_lst[0]
+                e_vdw = 0.0
+                for elmnt_nr in np.unique(struct.seg_elmnt_nr):
+                    area = struct.seg_area[struct.seg_elmnt_nr == elmnt_nr].sum()
+                    elmnt = 1 if elmnt_nr > 100 else int(elmnt_nr)
+                    tau = abs(par.dgsolv_tau.get(elmnt, 0.0))
+                    if tau == 0.0:
+                        tau = par.dgsolv_tau_approx
+                        missing_tau.add(elmnt)
+                    e_vdw += tau * area
+
+                e_diel = (
+                    mol.get_energy_tot() / 4.184 - e_gas * kcal_per_hartree
+                )
+                mu_liquid = rt_kcal * lng[idx_job, idx_mol]
+                e_ring = par.dgsolv_omega_ring * n_ring_atoms
+
+                dgsolv[idx_job, idx_mol] = (
+                    e_diel
+                    + mu_liquid
+                    - e_vdw
+                    - e_ring
+                    - reference_state_correction
+                    - par.dgsolv_eta
+                )
+
+        if missing_tau:
+            elements = ";".join(str(el) for el in sorted(missing_tau))
+            if par.dgsolv_strict:
+                raise ValueError(
+                    f"For the following atomic numbers not all parameters are "
+                    f"available for the calculation of solvation energies: "
+                    f"{elements}"
+                )
+            warnings.warn(
+                f"For the following atomic numbers not all parameters are "
+                f"available for the calculation of solvation energies, an "
+                f"estimate was used: {elements}"
+            )
+
+        return dgsolv
 
     def _get_mixture(self, x, T):
         """
@@ -308,6 +475,7 @@ class COSMORS(object):
         self._refmix_idxs_lst = []
         self._x_lst = []
         self._T_lst = []
+        self._solvation_job_lst = []
 
         self.jobmix_idxs = None
         self.refmix_idxs = None
@@ -501,12 +669,19 @@ class COSMORSCombinatorial(object):
 
         """
 
-        phi_dash_pxi = self.V_arr / (x * self.V_arr).sum()
-        theta_dash_pxi = self.A_arr / (x * self.A_arr).sum()
-        rel_area = self.A_arr / self.par.comb_sg_a_std
+        V_arr = self.V_arr
+        A_arr = self.A_arr
+
+        phi_dash_pxi = V_arr / (x * V_arr).sum()
+        theta_dash_pxi = A_arr / (x * A_arr).sum()
+        rel_area = A_arr / self.par.comb_sg_a_std
         buffarr1 = phi_dash_pxi / theta_dash_pxi
 
-        if self.par.comb_term == "staverman_guggenheim":
+        if self.par.comb_term == "none":
+
+            lng = np.zeros(len(x))
+
+        elif self.par.comb_term == "staverman_guggenheim":
 
             lng = (
                 np.log(phi_dash_pxi)
@@ -518,11 +693,21 @@ class COSMORSCombinatorial(object):
                 * (np.log(buffarr1) + 1 - buffarr1)
             )
 
+        elif self.par.comb_term == "klamt":
+            # Klamt (2003)
+
+            buffdb1 = (x * np.log(V_arr)).sum()
+            lng = (
+                self.par.comb_lambda0 * (np.log(V_arr) - buffdb1)
+                - self.par.comb_lambda1 * (phi_dash_pxi - 1)
+                - self.par.comb_lambda2 * (theta_dash_pxi - 1)
+            )
+
         elif self.par.comb_term == "staverman_guggenheim_exponential_scaling":
             # Soares (2011), Kikic (1980), Donohue Prausnitz (1975) */
 
-            buffarr1 = self.V_arr**self.par.comb_sg_expsc_exponent
-            phi_dash_pxi_scale = buffarr1 / (buffarr1 * x).sum()
+            buffarr2 = V_arr**self.par.comb_sg_expsc_exponent
+            phi_dash_pxi_scale = buffarr2 / (buffarr2 * x).sum()
 
             lng = (
                 np.log(phi_dash_pxi_scale)
@@ -532,6 +717,49 @@ class COSMORSCombinatorial(object):
                 * 0.5
                 * rel_area
                 * (np.log(buffarr1) + 1 - buffarr1)
+            )
+
+        elif self.par.comb_term == "staverman_guggenheim_grensemann":
+            # Grensemann and Gmehling, Ind. Eng. Chem. Res. 44 (2005) 1610,
+            # Eqs. (7) to (15). q# and r# are the mole fraction averaged areas
+            # and volumes of all other molecules (as in the C++ implementation)
+
+            sum_q_times_x = (A_arr * x).sum()
+            sum_r_times_x = (V_arr * x).sum()
+
+            lng = np.zeros(len(x))
+            for idx in range(len(x)):
+                q_j = A_arr[idx]
+                r_j = V_arr[idx]
+
+                q_hash = q_j
+                r_hash = r_j
+                sum_of_other_x = 1.0 - x[idx]
+                if sum_of_other_x > 0:
+                    others = np.arange(len(x)) != idx
+                    q_hash = (A_arr[others] * x[others]).sum() / sum_of_other_x
+                    r_hash = (V_arr[others] * x[others]).sum() / sum_of_other_x
+
+                F = (q_j / sum_q_times_x) ** (
+                    self.par.comb_sgg_lambda * (1 - min(q_j, q_hash) / max(q_j, q_hash))
+                )
+                V = (r_j / sum_r_times_x) ** (
+                    self.par.comb_sgg_beta * (1 - min(r_j, r_hash) / max(r_j, r_hash))
+                )
+
+                lng[idx] = 1 - V + np.log(V) + 1 - (V / F) + np.log(V / F)
+
+        elif self.par.comb_term == "franke_hannebauer":
+            # Franke and Hannebauer (2011)
+
+            average_volume = (x * V_arr).sum()
+            average_area = (x * A_arr).sum()
+            lng = (
+                self.par.comb_lambda0 * np.log(V_arr)
+                + self.par.comb_lambda1
+                * (1 - V_arr / average_volume - np.log(average_volume))
+                + self.par.comb_lambda2
+                * (1 - A_arr / average_area - np.log(average_area))
             )
 
         else:
@@ -570,6 +798,39 @@ class COSMORSEnthalpic(object):
 
         self.molecules_cache = {}
 
+        # cavity radius per element found in the COSMO files
+        self.element_radii = {}
+
+    def _check_radii_consistency(self, mol):
+        """
+        The cavity radii of an element have to be identical in all COSMO files,
+        otherwise the surface of the molecules is not comparable (check of the
+        C++ implementation). The behavior is set with the parameter
+        radii_consistency ("error", "warn" or "off").
+        """
+
+        mode = self.par.radii_consistency
+        if mode == "off":
+            return
+        if mode not in ("error", "warn"):
+            raise ValueError(f"Unknown radii_consistency {mode}")
+
+        for cosmo_struct in mol.cosmo_struct_lst:
+            elmnt_nr_arr = _convert_element_symbols(cosmo_struct.atm_elmnt)
+            for elmnt_nr, radius in zip(elmnt_nr_arr, cosmo_struct.atm_rad):
+                elmnt_nr = int(elmnt_nr)
+                if elmnt_nr not in self.element_radii:
+                    self.element_radii[elmnt_nr] = radius
+                elif abs(self.element_radii[elmnt_nr] - radius) > 1e-8:
+                    message = (
+                        f"Inconsistent radii set for atomic number {elmnt_nr} "
+                        f"was found ({self.element_radii[elmnt_nr]} and "
+                        f"{radius} Angstrom, file {cosmo_struct.filename})."
+                    )
+                    if mode == "error":
+                        raise ValueError(message)
+                    warnings.warn(message)
+
     def add_molecule(self, filepath_lst):
         """
         Add a molecule to the object
@@ -588,9 +849,13 @@ class COSMORSEnthalpic(object):
         if tuple(filepath_lst) not in self.molecules_cache:
             self.molecules_cache[tuple(filepath_lst)] = Molecule(filepath_lst)
 
-        self.mol_lst.append(self.molecules_cache[tuple(filepath_lst)])
-        mol = self.mol_lst[-1]
-        mol.convert_properties(self.par.r_av, self.par.mf_r_av_corr)
+        mol = self.molecules_cache[tuple(filepath_lst)]
+        self._check_radii_consistency(mol)
+
+        self.mol_lst.append(mol)
+        # the segment types change, stored interaction arrays are outdated
+        self.int_arr_store_dct = {}
+        mol.convert_properties(self.par.r_av, self.par.mf_r_av_corr, self.par)
 
         for cosmo_struct in mol.cosmo_struct_lst:
             self.segtp_collection.cluster_cosmo_struct(
@@ -610,6 +875,7 @@ class COSMORSEnthalpic(object):
         self.mol_lst = []
         self.segtp_collection = SegtpCollection(self.par)
         self.int_arr_store_dct = {}
+        self.element_radii = {}
 
     def get_interaction_arrays(self, T):
         """
@@ -632,9 +898,35 @@ class COSMORSEnthalpic(object):
 
         A_mf, E_mf, sigma_mf = self._calculate_A_mf_E_mf(T)
         A_hb, E_hb = self._calculate_A_hb_E_hb(T)
+        A_vdw, E_vdw = self._calculate_A_vdw_E_vdw(T)
 
-        E_int = E_mf + E_hb
-        A_int = A_mf + A_hb
+        # Segments of ions (only with molecule groups) do not interact, like
+        # in the C++ implementation
+        interacting = self._get_interacting_mask()
+        if interacting is not None:
+            A_mf = A_mf * interacting
+            E_mf = E_mf * interacting
+            A_hb = A_hb * interacting
+            E_hb = E_hb * interacting
+            A_vdw = A_vdw * interacting
+            E_vdw = E_vdw * interacting
+
+        # Reference state of the segments: pure segment
+        if self.par.segment_reference_state == "pure_segment":
+            A_mf = self._apply_pure_segment_reference_state(A_mf)
+            E_mf = self._apply_pure_segment_reference_state(E_mf)
+            A_hb = self._apply_pure_segment_reference_state(A_hb)
+            E_hb = self._apply_pure_segment_reference_state(E_hb)
+            A_vdw = self._apply_pure_segment_reference_state(A_vdw)
+            E_vdw = self._apply_pure_segment_reference_state(E_vdw)
+        elif self.par.segment_reference_state != "conductor":
+            raise ValueError(
+                f"Unknown segment_reference_state "
+                f"{self.par.segment_reference_state}"
+            )
+
+        E_int = E_mf + E_hb + E_vdw
+        A_int = A_mf + A_hb + A_vdw
         tau = np.exp(-A_int * (1 / (spcon.R * T)))
 
         int_arr_dct = {
@@ -644,6 +936,8 @@ class COSMORSEnthalpic(object):
             "E_mf": E_mf,
             "A_hb": A_hb,
             "E_hb": E_hb,
+            "A_vdw": A_vdw,
+            "E_vdw": E_vdw,
             "A_int": A_int,
             "E_int": E_int,
             "A_hb": A_hb,
@@ -740,7 +1034,11 @@ class COSMORSEnthalpic(object):
         sigma_mf = sigma_arr + sigma_arr.reshape(-1, 1)
 
         if self.par.mf_use_sigma_orth:
-            sigma_orth_arr = segtp_arr_dct["sigma_orth"]
+            if "sigma_corr" in segtp_arr_dct:
+                # sigma_orth of the segment types from the clustered sigma_corr
+                sigma_orth_arr = segtp_arr_dct["sigma_corr"] - 0.816 * sigma_arr
+            else:
+                sigma_orth_arr = segtp_arr_dct["sigma_orth"]
 
             # print('WARNING: CORRECTING SIGMA_ORTH IN COSMORS FOR TESTS')
             # sigma_orth_arr = sigma_orth_arr-0.816*sigma_arr
@@ -749,6 +1047,14 @@ class COSMORSEnthalpic(object):
             E_mf = mf_pref * sigma_mf * (sigma_mf + self.par.mf_f_corr * buffarr1)
         else:
             E_mf = mf_pref * sigma_mf * sigma_mf
+
+        # Repulsive fluorine correction of the misfit energy, part of the
+        # parameterization with polarizabilities
+        if self.par.polariz_mode > 0:
+            is_fluorine = segtp_arr_dct["elmnt_nr"] == 9
+            E_mf = E_mf + self.par.mf_e_f_corr * (
+                is_fluorine.reshape(-1, 1) | is_fluorine
+            )
 
         A_mf = E_mf.copy()
 
@@ -782,7 +1088,7 @@ class COSMORSEnthalpic(object):
         # Calculate interaction matrix. Identify donor, acceptor arrays first
         # and get hb prefactor corresponding to each element of each
         # segment type
-        seg_hb_pref_arr = np.zeros_like(elmnt_nr_arr)
+        seg_hb_pref_arr = np.zeros_like(elmnt_nr_arr, dtype="float64")
         elmnt_it = np.nditer(elmnt_nr_arr, flags=["c_index"])
         for elmnt_nr in elmnt_it:
             idx = elmnt_it.index
@@ -790,6 +1096,10 @@ class COSMORSEnthalpic(object):
                 seg_hb_pref_arr[idx] = self.par.hb_pref_arr[elmnt_nr]
             if elmnt_nr in self.par.hb_acc_elmnt_nr_arr:
                 seg_hb_pref_arr[idx] = self.par.hb_pref_arr[elmnt_nr]
+            if elmnt_nr == 0:
+                # the element number is not a descriptor, the switches
+                # hbd_sw and hba_sw are already set
+                seg_hb_pref_arr[idx] = 1.0
 
         # Get difference sigma+sigma_th for donors, zero if no donor
         del_sigma_hbd_arr = (
@@ -823,6 +1133,100 @@ class COSMORSEnthalpic(object):
         E_hb = hb_ge_conv_factor * A_hb
 
         return A_hb, E_hb
+
+    def _calculate_A_vdw_E_vdw(self, T):
+        """
+        Calculate the dispersion energy from the atomic polarizabilities
+
+        Parameters
+        ----------
+        T : float
+            Temperature in Kelvin.
+
+        Returns
+        -------
+        A_vdw : np.array(n_segtp, n_segtp)
+            Free dispersion interaction energies between all segments.
+        E_vdw : np.array(n_segtp, n_segtp)
+            Dispersion interaction energies between all segments.
+
+        """
+
+        n_segtp = len(self.segtp_collection)
+        mode = self.par.polariz_mode
+
+        if mode == 0:
+            return np.zeros((n_segtp, n_segtp)), np.zeros((n_segtp, n_segtp))
+
+        segtp_arr_dct = self.segtp_collection.get_segtps_as_array_dct()
+        alpha_arr = np.asarray(segtp_arr_dct["polariz"], dtype="float64")
+        alpha_ij = alpha_arr * alpha_arr.reshape(-1, 1)
+
+        if mode in (7, 8):
+            ionization_potential = np.array(
+                [
+                    get_ionization_potential_ev(
+                        elmnt_nr, self.par.differentiate_hydrogens
+                    )
+                    for elmnt_nr in segtp_arr_dct["elmnt_nr"]
+                ]
+            )
+
+        if mode == 7:
+            ionization_potential_correction = (
+                1 / ionization_potential / ionization_potential.reshape(-1, 1)
+            )
+            vdw = self.par.a_eff * self.par.vdw_m * np.sqrt(
+                alpha_ij * ionization_potential_correction
+            )
+        elif mode == 8:
+            ionization_potential_correction = 1 / (
+                ionization_potential + ionization_potential.reshape(-1, 1)
+            )
+            vdw = (
+                self.par.a_eff
+                * self.par.vdw_m
+                * np.sqrt(alpha_ij)
+                * ionization_potential_correction
+            )
+        else:
+            vdw = self.par.a_eff * self.par.vdw_m * np.sqrt(alpha_ij)
+
+        # the dispersion contribution is attractive
+        A_vdw = -vdw
+        E_vdw = A_vdw.copy()
+
+        return A_vdw, E_vdw
+
+    def _get_interacting_mask(self):
+        """
+        Segment pairs that interact
+
+        Only with differentiated molecule groups: only the segments of neutral
+        molecules (groups 0 to 2) interact, as in the C++ implementation.
+
+        Returns
+        -------
+        None or np.array(n_segtp, n_segtp) of bool
+
+        """
+
+        if not self.par.differentiate_molecule_groups:
+            return None
+
+        segtp_arr_dct = self.segtp_collection.get_segtps_as_array_dct()
+        neutral = np.isin(segtp_arr_dct["group"], (0, 1, 2))
+        return neutral.reshape(-1, 1) & neutral
+
+    @staticmethod
+    def _apply_pure_segment_reference_state(arr):
+        """A_ij - 0.5 * (A_ii + A_jj), the diagonal is set to zero."""
+
+        diagonal = np.diag(arr)
+        arr_new = arr - 0.5 * (diagonal.reshape(-1, 1) + diagonal)
+        np.fill_diagonal(arr_new, 0.0)
+
+        return arr_new
 
     def _calculate_X(self, x):
         """

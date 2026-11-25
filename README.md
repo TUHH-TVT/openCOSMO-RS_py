@@ -64,9 +64,8 @@ The interaction arrays contain the dispersion energy as `A_vdw`/`E_vdw`
 values are returned as `aim_*` and `pm_*`.
 
 Note: the `aim_*` energies of the C++ implementation (`average_surface_energies`)
-are additionally multiplied by the Avogadro constant and resolved by molecule
-pairs, the values of this package equal the sum over the partners divided by
-the Avogadro constant.
+are resolved by molecule pairs, the values of this package equal the sum over
+the partners. Both are given in J/mol.
 
 ## License
 
